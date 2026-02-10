@@ -17,7 +17,33 @@
 
 ## 🛠️ 安装步骤
 
-### 1. 安装基础软件
+### 方案 A：使用 winget 自动安装（推荐）
+
+如果你的 Windows 已安装 [winget](https://learn.microsoft.com/zh-cn/windows/package-manager/winget/)（Windows 11 自带，Windows 10 需要手动安装），可以使用自动化脚本：
+
+```powershell
+# 以管理员身份运行 PowerShell
+# 进入项目目录
+cd yinyi
+
+# 运行安装脚本
+.\scripts\install-deps-winget.ps1
+
+# 如果不需要安装 Ollama（手动安装时）
+.\scripts\install-deps-winget.ps1 -SkipOllama
+```
+
+脚本会自动安装：
+- ✅ Git
+- ✅ Python 3.11
+- ✅ Node.js 20
+- ✅ Ollama（如果可用）
+
+然后跳到步骤 2 继续。
+
+---
+
+### 方案 B：手动安装
 
 #### 1.1 Python 3.11+
 1. 访问 https://www.python.org/downloads/
