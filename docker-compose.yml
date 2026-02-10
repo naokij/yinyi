@@ -1,0 +1,71 @@
+version: '3.8'
+
+services:
+  vllm:
+    image: vllm/vllm-openai:latest
+    container_name: yinyi-vllm
+    volumes:
+      - ./data/models:/root/.cache/huggingface
+      - ./data/vllm:/tmp
+    ports:
+      - "8000:8000"
+    environment:
+      - HF_HOME=/root/.cache/huggingface
+      - CUDA_VISIBLE_DEVICES=0
+    command: >
+      --model Qwen/Qwen3-VL-4B-Instruct
+      --dtype bfloat16
+      --max-model-len 8192
+      --gpu-memory-utilization 0.85
+      --port 8000
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: ${GPU_DRIVER:-cpu}
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: yinyi-backend
+    volumes:
+      - ./data:/app/data
+      - ${PHOTOS_DIR:-./photos}:/app/photos:ro
+      - ./fonts:/app/fonts:ro
+      - ./templates:/app/templates
+      - ./exports:/app/exports
+    ports:
+      - "8765:8765"
+    environment:
+      - VLLM_HOST=http://vllm:8000
+      - DATABASE_URL=sqlite:///app/data/yinyi.db
+      - PHOTOS_DIR=/app/photos
+      - EXPORTS_DIR=/app/exports
+      - FONTS_DIR=/app/fonts
+      - TEMPLATES_DIR=/app/templates
+    depends_on:
+      vllm:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    image: nginx:alpine
+    container_name: yinyi-frontend
+    volumes:
+      - ./frontend/dist:/usr/share/nginx/html:ro
+      - ./frontend/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+    restart: unless-stopped

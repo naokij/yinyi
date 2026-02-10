@@ -1,0 +1,43 @@
+# 印忆 (YinYi) - 宿主机方案配置
+# 使用本机 Ollama + Qwen3-VL-4B（支持 Metal 加速）
+
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: yinyi-backend
+    volumes:
+      - ./data:/app/data
+      - ${PHOTOS_DIR:-./photos}:/app/photos:ro
+      - ./fonts:/app/fonts:ro
+      - ./templates:/app/templates
+      - ./exports:/app/exports
+    ports:
+      - "8765:8765"
+    environment:
+      - AI_BACKEND=ollama
+      - OLLAMA_HOST=http://host.docker.internal:11434
+      - OLLAMA_MODEL=qwen3-vl:4b
+      - DATABASE_URL=sqlite:///app/data/yinyi.db
+      - PHOTOS_DIR=/app/photos
+      - EXPORTS_DIR=/app/exports
+      - FONTS_DIR=/app/fonts
+      - TEMPLATES_DIR=/app/templates
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+  frontend:
+    image: nginx:alpine
+    container_name: yinyi-frontend
+    volumes:
+      - ./frontend/dist:/usr/share/nginx/html:ro
+      - ./frontend/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
