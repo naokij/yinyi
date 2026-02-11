@@ -153,7 +153,7 @@ def analyze_photo_task(photo_id: int):
         try:
             if ai_backend == 'ollama':
                 print(f"   使用 Ollama 后端")
-                model = os.getenv('OLLAMA_MODEL', 'qwen2.5-vl:7b')
+                model = os.getenv('OLLAMA_MODEL', 'qwen3-vl:4b')
                 api_url = os.getenv('OLLAMA_HOST', 'http://localhost:11434')
                 analysis_data = analyze_with_ollama(image_base64, api_url, model)
                 model_name = model
