@@ -110,8 +110,8 @@ export default {
     }
     
     const analyzeAll = async () => {
-      // 获取待分析的照片（最多100张）
-      const maxAnalyze = 100
+      // 获取所有待分析的照片
+      const maxAnalyze = 10000  // 支持最多分析10000张照片
       
       // 先获取足够多的待分析照片
       await photoStore.fetchPhotos({ 
@@ -126,23 +126,15 @@ export default {
         return
       }
       
-      const idsToAnalyze = pendingIds.slice(0, maxAnalyze)
-      const totalPending = photoStore.total  // 使用总数而不是当前页数量
+      const idsToAnalyze = pendingIds
+      const totalPending = photoStore.total
       
       let confirmMsg
-      if (totalPending <= maxAnalyze) {
-        confirmMsg = `确定要分析 ${totalPending} 张照片吗？这可能需要一些时间。`
-      } else {
-        confirmMsg = `共有 ${totalPending} 张待分析照片。\n将分析最新的 ${maxAnalyze} 张（可分批进行）。\n\n确定开始吗？`
-      }
+      confirmMsg = `确定要分析 ${totalPending} 张照片吗？这可能需要较长时间。`
       
       if (confirm(confirmMsg)) {
         await photoStore.batchAnalyze(idsToAnalyze)
-        if (totalPending > maxAnalyze) {
-          alert(`已启动分析 ${idsToAnalyze.length} 张照片。\n还有 ${totalPending - maxAnalyze} 张待分析，可再次点击继续。`)
-        } else {
-          alert('分析任务已启动，请稍后查看结果')
-        }
+        alert('分析任务已启动，请稍后查看结果')
         // 刷新照片列表
         photoStore.fetchPhotos()
       }
