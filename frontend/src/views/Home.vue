@@ -110,15 +110,41 @@ export default {
     }
     
     const analyzeAll = async () => {
-      const pendingIds = photoStore.pendingPhotos.map(p => p.id)
+      // 获取待分析的照片（最多100张）
+      const maxAnalyze = 100
+      
+      // 先获取足够多的待分析照片
+      await photoStore.fetchPhotos({ 
+        status: 'pending', 
+        page: 1, 
+        page_size: maxAnalyze 
+      })
+      
+      const pendingIds = photoStore.photos.map(p => p.id)
       if (pendingIds.length === 0) {
         alert('没有待分析的照片')
         return
       }
       
-      if (confirm(`确定要分析 ${pendingIds.length} 张照片吗？这可能需要一些时间。`)) {
-        await photoStore.batchAnalyze(pendingIds)
-        alert('分析任务已启动，请稍后查看结果')
+      const idsToAnalyze = pendingIds.slice(0, maxAnalyze)
+      const totalPending = photoStore.total  // 使用总数而不是当前页数量
+      
+      let confirmMsg
+      if (totalPending <= maxAnalyze) {
+        confirmMsg = `确定要分析 ${totalPending} 张照片吗？这可能需要一些时间。`
+      } else {
+        confirmMsg = `共有 ${totalPending} 张待分析照片。\n将分析最新的 ${maxAnalyze} 张（可分批进行）。\n\n确定开始吗？`
+      }
+      
+      if (confirm(confirmMsg)) {
+        await photoStore.batchAnalyze(idsToAnalyze)
+        if (totalPending > maxAnalyze) {
+          alert(`已启动分析 ${idsToAnalyze.length} 张照片。\n还有 ${totalPending - maxAnalyze} 张待分析，可再次点击继续。`)
+        } else {
+          alert('分析任务已启动，请稍后查看结果')
+        }
+        // 刷新照片列表
+        photoStore.fetchPhotos()
       }
     }
     

@@ -8,8 +8,7 @@ from typing import List, Optional
 from pydantic import BaseModel
 from datetime import datetime
 
-from database import get_db
-from models import Photo as PhotoModel, Analysis as AnalysisModel
+from database import get_db, Photo as PhotoModel, Analysis as AnalysisModel
 
 
 router = APIRouter()
@@ -19,17 +18,35 @@ class PhotoResponse(BaseModel):
     id: int
     path: str
     filename: str
-    width: Optional[int]
-    height: Optional[int]
-    taken_at: Optional[datetime]
-    location: Optional[str]
+    width: Optional[int] = None
+    height: Optional[int] = None
+    taken_at: Optional[datetime] = None
+    location: Optional[str] = None
     status: str
-    memory_score: Optional[float]
-    aesthetic_score: Optional[float]
-    caption: Optional[str]
+    memory_score: Optional[float] = None
+    aesthetic_score: Optional[float] = None
+    caption: Optional[str] = None
     
     class Config:
         from_attributes = True
+    
+    @classmethod
+    def from_orm(cls, photo):
+        """从 ORM 对象创建响应，包含关联的分析数据"""
+        data = {
+            "id": photo.id,
+            "path": photo.path,
+            "filename": photo.filename,
+            "width": photo.width,
+            "height": photo.height,
+            "taken_at": photo.taken_at,
+            "location": photo.location,
+            "status": photo.status,
+            "memory_score": photo.analysis.memory_score if photo.analysis else None,
+            "aesthetic_score": photo.analysis.aesthetic_score if photo.analysis else None,
+            "caption": photo.analysis.caption if photo.analysis else None
+        }
+        return cls(**data)
 
 
 class PhotoListResponse(BaseModel):
@@ -71,9 +88,12 @@ async def list_photos(
     
     photos = query.offset((page - 1) * page_size).limit(page_size).all()
     
+    # 转换为响应模型
+    photo_responses = [PhotoResponse.from_orm(p) for p in photos]
+    
     return {
         "total": total,
-        "photos": photos,
+        "photos": photo_responses,
         "page": page,
         "page_size": page_size
     }
@@ -85,7 +105,80 @@ async def get_photo(photo_id: int, db: Session = Depends(get_db)):
     photo = db.query(PhotoModel).filter(PhotoModel.id == photo_id).first()
     if not photo:
         raise HTTPException(status_code=404, detail="照片不存在")
-    return photo
+    return PhotoResponse.from_orm(photo)
+
+
+@router.get("/{photo_id}/file")
+async def get_photo_file(photo_id: int, db: Session = Depends(get_db)):
+    """获取照片文件（HEIC 自动转码为 JPEG）"""
+    import os
+    from pathlib import Path
+    from starlette.responses import FileResponse as StarletteFileResponse
+    
+    # 导入缓存管理器
+    import sys
+    sys.path.insert(0, str(Path(__file__).parent.parent))
+    from cache_manager import get_cache_manager
+
+    photo = db.query(PhotoModel).filter(PhotoModel.id == photo_id).first()
+    if not photo:
+        raise HTTPException(status_code=404, detail="照片不存在")
+
+    if not os.path.exists(photo.path):
+        raise HTTPException(status_code=404, detail="照片文件不存在")
+
+    file_path = photo.path
+    is_heic = photo.path.lower().endswith('.heic')
+    cache_manager = None
+    
+    # 检查是否是 HEIC 格式
+    if is_heic:
+        cache_manager = get_cache_manager()
+        cache_path = cache_manager.get_cache_path(photo_id)
+        
+        # 如果缓存不存在，转码
+        if not cache_path.exists():
+            try:
+                from PIL import Image
+                from pillow_heif import register_heif_opener
+                
+                register_heif_opener()
+                
+                # 打开 HEIC 并保存为 JPEG
+                img = Image.open(photo.path)
+                
+                # 转换为 RGB（去除透明通道）
+                if img.mode in ('RGBA', 'P'):
+                    img = img.convert('RGB')
+                
+                # 保存为 JPEG，质量 90%
+                img.save(cache_path, 'JPEG', quality=90, optimize=True)
+                
+                print(f"[HEIC] 转码完成: {photo.filename} -> {cache_path}")
+                
+            except Exception as e:
+                print(f"[HEIC] 转码失败: {photo.filename}, 错误: {e}")
+                raise HTTPException(status_code=500, detail=f"HEIC 转码失败: {str(e)}")
+        else:
+            # 更新缓存文件访问时间（用于 LRU 策略）
+            cache_manager.update_access_time(cache_path)
+        
+        file_path = str(cache_path)
+    
+    # 使用 Starlette FileResponse 但手动设置 headers
+    response = StarletteFileResponse(
+        path=file_path,
+        media_type="image/jpeg"
+    )
+    # 移除 content-disposition header
+    if "content-disposition" in response.headers:
+        del response.headers["content-disposition"]
+    
+    # 异步触发缓存清理（不阻塞响应）
+    if is_heic and cache_manager:
+        cache_manager.cleanup_async()
+    
+    return response
 
 
 @router.delete("/{photo_id}")

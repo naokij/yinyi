@@ -9,8 +9,7 @@ from typing import List, Optional
 from pydantic import BaseModel
 from pathlib import Path
 
-from database import get_db
-from models import Photo as PhotoModel, Export as ExportModel
+from database import get_db, Photo as PhotoModel, Export as ExportModel
 from renderer import render_polaroid
 from config import settings
 

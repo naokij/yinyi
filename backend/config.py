@@ -2,8 +2,20 @@
 配置管理
 """
 
-from pydantic_settings import BaseSettings
+import os
+from dotenv import load_dotenv
 from pathlib import Path
+
+# 先加载环境变量（确保 .env 覆盖系统环境变量）
+env_path = Path(__file__).parent / ".env"
+if env_path.exists():
+    load_dotenv(str(env_path), override=True)
+
+# 确保环境变量已设置（pydantic-settings 会读取这些）
+os.environ["AI_BACKEND"] = os.getenv("AI_BACKEND", "ollama")
+os.environ["OLLAMA_HOST"] = os.getenv("OLLAMA_HOST", "http://localhost:11434")
+
+from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
@@ -22,6 +34,11 @@ class Settings(BaseSettings):
     VLLM_HOST: str = "http://localhost:8000"
     VLLM_MODEL: str = "Qwen/Qwen3-VL-4B-Instruct"
     
+    # Ollama 配置（Windows 原生部署）
+    OLLAMA_HOST: str = "http://localhost:11434"
+    OLLAMA_MODEL: str = "qwen3-vl:4b"
+    AI_BACKEND: str = "ollama"
+    
     # 扫描配置
     SUPPORTED_FORMATS: tuple = ('.jpg', '.jpeg', '.png', '.heic', '.raw', '.cr2', '.nef')
     
@@ -31,8 +48,9 @@ class Settings(BaseSettings):
     PRINT_DPI: int = 300
     
     class Config:
-        env_file = ".env"
-        case_sensitive = True
+        env_file = None
+        case_sensitive = False
+        extra = 'ignore'
     
     @property
     def print_width_px(self) -> int:

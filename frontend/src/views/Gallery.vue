@@ -3,19 +3,22 @@
     <header class="gallery-header">
       <button class="back-btn" @click="$router.push('/')">←</button>
       <h1>照片库</h1>
-      <div class="filter-bar">
-        <select v-model="filterStatus" @change="applyFilter">
-          <option value="">全部</option>
-          <option value="analyzed">已分析</option>
-          <option value="pending">待处理</option>
-          <option value="duplicate">重复</option>
-        </select>
-        <select v-model="sortBy" @change="applyFilter">
-          <option value="taken_at">拍摄时间</option>
-          <option value="memory_score">回忆价值</option>
-          <option value="aesthetic_score">美观度</option>
-        </select>
-      </div>
+        <div class="filter-bar">
+          <select v-model="photoStore.filterStatus" @change="applyFilter">
+            <option value="">全部</option>
+            <option value="analyzed">已分析</option>
+            <option value="pending">待处理</option>
+            <option value="duplicate">重复</option>
+          </select>
+          <select v-model="photoStore.sortBy" @change="onSortChange">
+            <option value="taken_at">按时间</option>
+            <option value="memory_score">按回忆分</option>
+            <option value="aesthetic_score">按美观分</option>
+          </select>
+          <span class="sort-indicator" v-if="photoStore.sortBy !== 'taken_at'">
+            {{ sortLabels[photoStore.sortBy] }}
+          </span>
+        </div>
     </header>
     
     <div class="photo-grid" v-if="photoStore.photos.length > 0">
@@ -27,7 +30,13 @@
         @click="viewPhoto(photo)"
       >
         <div class="photo-thumb">
-          <div class="placeholder">
+          <img
+            :src="`/api/photos/${photo.id}/file`"
+            :alt="photo.filename"
+            loading="lazy"
+            @error="handleImageError"
+          />
+          <div class="placeholder" v-if="!photo._imgLoaded">
             <span>{{ photo.filename.slice(0, 2) }}</span>
           </div>
           <div class="status-badge" :class="photo.status">
@@ -77,18 +86,17 @@
 </template>
 
 <script>
-import { ref, computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, onMounted } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { usePhotoStore } from '@/stores/photos'
 
 export default {
   name: 'Gallery',
   setup() {
     const router = useRouter()
+    const route = useRoute()
     const photoStore = usePhotoStore()
-    const filterStatus = ref('')
-    const sortBy = ref('taken_at')
-    
+
     const statusText = {
       pending: '待分析',
       analyzing: '分析中',
@@ -96,30 +104,49 @@ export default {
       duplicate: '重复',
       error: '错误'
     }
-    
-    const totalPages = computed(() => 
+
+    const sortLabels = {
+      memory_score: '↓ 回忆分',
+      aesthetic_score: '↓ 美观分'
+    }
+
+    const totalPages = computed(() =>
       Math.ceil(photoStore.total / photoStore.pageSize)
     )
-    
+
     onMounted(() => {
+      // 检查 URL query 参数
+      if (route.query.sort) {
+        photoStore.sortBy = route.query.sort
+      }
+      if (route.query.page) {
+        photoStore.currentPage = parseInt(route.query.page)
+      }
       photoStore.fetchPhotos()
     })
-    
+
     const applyFilter = () => {
-      photoStore.fetchPhotos({
-        status: filterStatus.value,
-        sort_by: sortBy.value
+      photoStore.setFilter(photoStore.filterStatus)
+    }
+
+    const changePage = (page) => {
+      photoStore.currentPage = page
+      photoStore.fetchPhotos()
+      // 更新 URL 的 page 参数
+      router.push({
+        path: '/gallery',
+        query: { ...route.query, page: page }
       })
     }
-    
-    const changePage = (page) => {
-      photoStore.setPage(page)
+
+    const onSortChange = () => {
+      photoStore.setSort(photoStore.sortBy)
     }
-    
+
     const viewPhoto = (photo) => {
       router.push(`/print/${photo.id}`)
     }
-    
+
     const formatDate = (dateStr) => {
       if (!dateStr) return '未知日期'
       const date = new Date(dateStr)
@@ -129,17 +156,35 @@ export default {
         day: 'numeric'
       })
     }
-    
+
+    const handleImageError = (event) => {
+      const img = event.target
+      const retryCount = parseInt(img.dataset.retryCount || '0')
+      
+      if (retryCount < 2) {
+        // 重试，添加时间戳避免缓存
+        img.dataset.retryCount = (retryCount + 1).toString()
+        setTimeout(() => {
+          img.src = img.src + (img.src.includes('?') ? '&' : '?') + 'retry=' + Date.now()
+        }, 500)
+      } else {
+        // 重试失败，显示占位符
+        img.style.display = 'none'
+        img.nextElementSibling.style.display = 'flex'
+      }
+    }
+
     return {
       photoStore,
-      filterStatus,
-      sortBy,
       statusText,
+      sortLabels,
       totalPages,
       applyFilter,
       changePage,
+      onSortChange,
       viewPhoto,
-      formatDate
+      formatDate,
+      handleImageError
     }
   }
 }
@@ -180,6 +225,7 @@ export default {
 
 .filter-bar {
   display: flex;
+  align-items: center;
   gap: 8px;
 }
 
@@ -189,6 +235,12 @@ export default {
   border-radius: 6px;
   font-size: 13px;
   background: white;
+}
+
+.sort-indicator {
+  font-size: 12px;
+  color: #667eea;
+  font-weight: 500;
 }
 
 .photo-grid {
@@ -215,9 +267,20 @@ export default {
   position: relative;
   aspect-ratio: 1;
   background: #f0f0f0;
+  overflow: hidden;
+}
+
+.photo-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .placeholder {
+  position: absolute;
+  top: 0;
+  left: 0;
   width: 100%;
   height: 100%;
   display: flex;

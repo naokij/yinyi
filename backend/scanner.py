@@ -10,8 +10,7 @@ from typing import Optional, Set
 import piexif
 from PIL import Image
 
-from database import SessionLocal
-from models import Photo as PhotoModel
+from database import SessionLocal, Photo as PhotoModel
 from config import settings
 
 
@@ -85,7 +84,7 @@ def scan_directory_task(
             print(f"扫描路径不存在: {scan_path}")
             return
         
-        print(f"🔍 开始扫描: {scan_path}")
+        print(f"[扫描] 开始扫描: {scan_path}")
         
         # 获取已有照片的文件哈希集合
         existing_hashes = {p.file_hash for p in db.query(PhotoModel.file_hash).filter(PhotoModel.file_hash != None).all()}
@@ -119,7 +118,7 @@ def scan_directory_task(
                     continue
                 
                 # 文件已更新，重新处理
-                print(f"📝 文件已更新: {file_path.name}")
+                print(f"[更新] 文件已更新: {file_path.name}")
                 existing_photo.status = "pending"
                 existing_photo.modified_time = current_mtime
                 existing_photo.file_size = file_path.stat().st_size
@@ -128,12 +127,12 @@ def scan_directory_task(
                 continue
             
             # 新文件，计算哈希
-            print(f"📷 发现新照片: {file_path.name}")
+            print(f"[新照片] 发现新照片: {file_path.name}")
             file_hash = compute_file_hash(str_path)
             
             # 检查是否重复
             if file_hash in existing_hashes:
-                print(f"🔄 发现重复: {file_path.name}")
+                print(f"[重复] 发现重复: {file_path.name}")
                 # 找到原图
                 original = db.query(PhotoModel).filter(PhotoModel.file_hash == file_hash).first()
                 
@@ -177,13 +176,13 @@ def scan_directory_task(
         
         db.commit()
         
-        print(f"✅ 扫描完成!")
+        print(f"[完成] 扫描完成!")
         print(f"   新增: {new_count}")
         print(f"   重复: {duplicate_count}")
         print(f"   更新: {updated_count}")
         
     except Exception as e:
-        print(f"❌ 扫描失败: {e}")
+        print(f"[错误] 扫描失败: {e}")
         db.rollback()
         raise
     finally:

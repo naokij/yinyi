@@ -11,9 +11,11 @@
 
 - **操作系统**: Windows 10 (64-bit) 或 Windows 11
 - **处理器**: AMD Ryzen 5800H 或同等级别
-- **内存**: 16GB 以上（推荐 32GB）
-- **硬盘**: SSD，剩余空间 20GB+
-- **网络**: 能访问 NAS 的局域网
+- **内存**: 
+  - 心流 API 模式：8GB+
+  - 本地 Ollama 模式：16GB+（推荐 32GB）
+- **硬盘**: SSD，剩余空间 10GB+
+- **网络**: 能访问 NAS 的局域网，可访问互联网（心流 API）
 
 ## 🛠️ 安装步骤
 
@@ -21,23 +23,27 @@
 
 如果你的 Windows 已安装 [winget](https://learn.microsoft.com/zh-cn/windows/package-manager/winget/)（Windows 11 自带，Windows 10 需要手动安装），可以使用自动化脚本：
 
+**心流 API 模式（推荐，无需 Ollama）：**
 ```powershell
 # 以管理员身份运行 PowerShell
 # 进入项目目录
 cd yinyi
 
+# 运行安装脚本（跳过 Ollama）
+.\scripts\install-deps-winget.ps1 -SkipOllama
+```
+
+**本地 Ollama 模式：**
+```powershell
 # 运行安装脚本
 .\scripts\install-deps-winget.ps1
-
-# 如果不需要安装 Ollama（手动安装时）
-.\scripts\install-deps-winget.ps1 -SkipOllama
 ```
 
 脚本会自动安装：
 - ✅ Git
 - ✅ Python 3.11
 - ✅ Node.js 20
-- ✅ Ollama（如果可用）
+- ✅ Ollama（可选）
 
 然后跳到步骤 2 继续。
 
@@ -135,14 +141,42 @@ dir
 
 创建 `.env` 文件在项目根目录：
 
+**方案 A：心流 API（推荐，无需本地 GPU）**
 ```env
-# Windows 路径使用双反斜杠或原始字符串
+# 照片目录（Windows 路径使用双反斜杠或原始字符串）
 PHOTOS_DIR=Z:\Photos
 EXPORTS_DIR=.\exports
 FONTS_DIR=.\fonts
+
+# AI 后端配置
+AI_BACKEND=iflow
+IFLOW_API_KEY=your-api-key-here
+IFLOW_MODEL=qwen3-vl-plus
+IFLOW_API_URL=https://api.iflow.cn/v1/chat/completions
+
+# HEIC 缓存配置（可选）
+HEIC_CACHE_MAX_GB=5.0
+HEIC_CACHE_MAX_AGE_DAYS=30
+```
+
+**方案 B：本地 Ollama**
+```env
+# 照片目录
+PHOTOS_DIR=Z:\Photos
+EXPORTS_DIR=.\exports
+FONTS_DIR=.\fonts
+
+# AI 后端配置
+AI_BACKEND=ollama
 OLLAMA_HOST=http://localhost:11434
 OLLAMA_MODEL=qwen3-vl:4b
+
+# HEIC 缓存配置（可选）
+HEIC_CACHE_MAX_GB=5.0
+HEIC_CACHE_MAX_AGE_DAYS=30
 ```
+
+> **心流 API 密钥获取**：访问 https://platform.iflow.cn 注册并创建 API Key
 
 ### 5. 安装中文字体（推荐）
 
@@ -172,14 +206,9 @@ cd C:\Projects\yinyi
 
 **方法 2：手动启动**
 
-打开 **3 个** PowerShell 窗口：
+**心流 API 模式（仅需 2 个窗口）：**
 
-**窗口 1：Ollama 服务**
-```powershell
-ollama serve
-```
-
-**窗口 2：后端服务**
+**窗口 1：后端服务**
 ```powershell
 cd C:\Projects\yinyi\backend
 
@@ -196,7 +225,7 @@ pip install -r requirements.txt
 python main.py
 ```
 
-**窗口 3：前端服务**
+**窗口 2：前端服务**
 ```powershell
 cd C:\Projects\yinyi\frontend
 
@@ -206,6 +235,17 @@ npm install
 # 启动开发服务器
 npm run dev
 ```
+
+**本地 Ollama 模式（需要 3 个窗口）：**
+
+**窗口 1：Ollama 服务**
+```powershell
+ollama serve
+```
+
+**窗口 2：后端服务**（同上）
+
+**窗口 3：前端服务**（同上）
 
 ### 7. 访问应用
 
@@ -272,9 +312,51 @@ netstat -ano | findstr 8080
 taskkill /PID <PID> /F
 ```
 
+### 问题 6：HEIC 缓存占用过多空间
+
+**查看缓存统计：**
+```powershell
+curl http://localhost:8765/admin/cache/stats
+```
+
+**手动清理缓存：**
+```powershell
+# 触发自动清理
+curl -X POST "http://localhost:8765/admin/cache/cleanup?force=true"
+
+# 或手动删除缓存文件
+Remove-Item -Path "backend\data\cache\heic\*" -Recurse -Force
+```
+
+**配置缓存限制：**
+在 `.env` 文件中：
+```env
+HEIC_CACHE_MAX_GB=5.0      # 缓存上限 5GB
+HEIC_CACHE_MAX_AGE_DAYS=30 # 30天未访问自动清理
+```
+
+## 🤖 AI 后端选择指南
+
+### 心流 API vs Ollama 对比
+
+| 特性 | 心流 API | Ollama (本地) |
+|------|----------|---------------|
+| **内存需求** | 8GB+ | 16GB+ |
+| **GPU 要求** | 无需 | 推荐但非必须 |
+| **网络要求** | 需要互联网 | 纯本地运行 |
+| **隐私保护** | 照片上传到云端 | 完全本地处理 |
+| **速度** | 3-5 秒/张 | 2-4 秒/张 (CPU) |
+| **成本** | API 调用费 | 免费 |
+| **配置复杂度** | 简单（只需 API Key） | 需下载模型 |
+
+### 推荐场景
+
+- **心流 API**: 电脑内存较小（<16GB）、不想管理模型、追求快速部署
+- **Ollama**: 注重隐私、有大量照片需要分析、有充足内存
+
 ## 🚀 性能优化
 
-### 1. Ollama 使用更多 CPU 线程
+### 1. Ollama 使用更多 CPU 线程（仅 Ollama 模式）
 
 在启动 Ollama 前设置环境变量：
 ```powershell

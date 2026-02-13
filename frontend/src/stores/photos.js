@@ -8,6 +8,9 @@ export const usePhotoStore = defineStore('photos', {
     loading: false,
     currentPage: 1,
     pageSize: 20,
+    sortBy: 'taken_at',
+    sortOrder: 'desc',
+    filterStatus: '',
     scanStatus: {
       status: 'idle',
       total_photos: 0,
@@ -30,20 +33,39 @@ export const usePhotoStore = defineStore('photos', {
   actions: {
     async fetchPhotos(params = {}) {
       this.loading = true
+      console.log('[Gallery] 开始加载照片...')
       try {
         const response = await photoApi.getPhotos({
           page: this.currentPage,
           page_size: this.pageSize,
+          sort_by: this.sortBy,
+          sort_order: this.sortOrder,
+          status: this.filterStatus || undefined,
           ...params
         })
+        console.log('[Gallery] API 响应:', response.data)
         this.photos = response.data.photos
         this.total = response.data.total
+        console.log(`[Gallery] 加载完成: ${this.photos.length} 张照片, 共 ${this.total} 张`)
       } catch (error) {
-        console.error('获取照片失败:', error)
+        console.error('[Gallery] 获取照片失败:', error)
+        alert('加载照片失败: ' + (error.response?.data?.detail || error.message))
         throw error
       } finally {
         this.loading = false
       }
+    },
+
+    setSort(sortBy, sortOrder = 'desc') {
+      this.sortBy = sortBy
+      this.sortOrder = sortOrder
+      this.fetchPhotos()
+    },
+
+    setFilter(status) {
+      this.filterStatus = status
+      this.currentPage = 1
+      this.fetchPhotos()
     },
 
     async startScan(path = null) {

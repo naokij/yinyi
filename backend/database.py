@@ -73,12 +73,16 @@ class Analysis(Base):
     description = Column(Text)  # 画面描述
     caption = Column(Text)      # 感性文案（核心）
     tags = Column(Text)         # 标签，JSON 格式
-    
+
     # 评分
     memory_score = Column(Float)      # 回忆价值 0-10
     aesthetic_score = Column(Float)   # 美观度 0-10
-    sentiment = Column(String(20))    # 情感倾向：happy, warm, nostalgic, peaceful...
-    
+    sentiment = Column(String(20))    # 情感倾向
+
+    # InkTime 扩展字段
+    photo_type = Column(Text)    # 照片类型：人物/家庭/旅行/风景等
+    reason = Column(Text)        # 评分理由
+
     # 分析元数据
     model = Column(String(100))       # 使用的模型
     analyzed_at = Column(DateTime, default=datetime.utcnow)

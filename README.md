@@ -8,9 +8,10 @@
 
 ## ✨ 特性
 
-- 🤖 **AI 智能分析**：使用本地 Qwen3-VL-4B 视觉大模型分析照片内容
+- 🤖 **AI 智能分析**：支持本地 Qwen3-VL 或云端心流 API 分析照片
 - 💭 **温馨文案**：自动生成感性、温暖的一句话描述
 - 📸 **拍立得风格**：针对米家 6 寸相纸（100×148mm, 2:3）优化的经典留白设计
+- 🖼️ **HEIC 支持**：iPhone 照片自动转码，缓存自动清理
 - 🔍 **智能去重**：基于 SHA-256 文件哈希自动检测重复照片
 - 🏠 **NAS 集成**：支持 SMB/NFS 挂载，照片存 NAS，运行在本机
 - 💻 **跨平台**：支持 Windows、macOS、Linux
@@ -38,8 +39,7 @@
 
 **系统要求：**
 - Windows 10/11 64-bit
-- 16GB+ 内存（推荐 32GB）
-- AMD Ryzen 5800H 或同级别 CPU
+- 8GB+ 内存（心流 API 模式）或 16GB+（本地 Ollama）
 - NAS 照片通过 SMB 访问
 
 **安装步骤：**
@@ -48,12 +48,21 @@
    - Python 3.11+ (勾选 "Add to PATH")
    - Node.js 18+
    - Git for Windows
-   - Ollama for Windows
 
-2. **下载模型**
+2. **选择 AI 后端**（二选一）
+
+   **方案 A：心流 API（推荐，无需本地 GPU）**
    ```powershell
-   ollama serve        # 保持运行
-   ollama pull qwen3-vl:4b  # 另一个窗口
+   # 在 .env 文件中配置：
+   AI_BACKEND=iflow
+   IFLOW_API_KEY=your-api-key
+   ```
+
+   **方案 B：本地 Ollama（需要 16GB+ 内存）**
+   ```powershell
+   # 安装 Ollama 并下载模型
+   ollama serve              # 保持运行
+   ollama pull qwen3-vl:4b   # 另一个窗口
    ```
 
 3. **映射 NAS 照片**
@@ -142,12 +151,21 @@ PHOTOS_DIR=Z:\Photos
 # 导出目录
 EXPORTS_DIR=.\exports
 
-# Ollama 配置
+# AI 后端选择：ollama / iflow / vllm
+AI_BACKEND=iflow
+
+# Ollama 配置（本地运行）
 OLLAMA_HOST=http://localhost:11434
 OLLAMA_MODEL=qwen3-vl:4b
 
-# AI 后端选择（ollama/vllm）
-AI_BACKEND=ollama
+# 心流 API 配置（云端，无需本地 GPU）
+IFLOW_API_KEY=your-api-key-here
+IFLOW_MODEL=qwen3-vl-plus
+IFLOW_API_URL=https://api.iflow.cn/v1/chat/completions
+
+# HEIC 缓存配置（可选）
+HEIC_CACHE_MAX_GB=5.0      # 缓存上限
+HEIC_CACHE_MAX_AGE_DAYS=30 # 最大保留天数
 ```
 
 ### NAS 照片访问
@@ -170,19 +188,28 @@ volumes:
 
 ## 📊 性能对比
 
-### Ryzen 5800H (32GB) 实测
+### AI 后端对比
 
-| 部署方式 | 模型 | 分析速度 | 备注 |
-|----------|------|----------|------|
-| **Windows 原生** ⭐ | Qwen3-VL-4B | 2-4 秒/张 | 推荐，无 Docker 开销 |
-| WSL2 + Docker | Qwen3-VL-4B | 3-6 秒/张 | 有虚拟化开销 |
-| Docker (纯 CPU) | Qwen3-VL-4B | 5-10 秒/张 | 适合无 GPU 环境 |
+| AI 后端 | 分析速度 | 内存需求 | 适用场景 | 成本 |
+|---------|----------|----------|----------|------|
+| **心流 API** ⭐ | 3-5 秒/张 | 8GB | 推荐，无需本地 GPU | API 调用费 |
+| Ollama (本地) | 2-4 秒/张 | 16GB+ | 本地运行，隐私保护 | 免费 |
+| vLLM | 1-2 秒/张 | 24GB+ | 高性能本地部署 | 免费 |
+
+### 部署方式对比 (Ryzen 5800H)
+
+| 部署方式 | AI 后端 | 分析速度 | 备注 |
+|----------|---------|----------|------|
+| **Windows 原生** ⭐ | 心流 API | 3-5 秒/张 | 无需 Ollama，启动更快 |
+| Windows 原生 | Ollama | 2-4 秒/张 | 需要 16GB+ 内存 |
+| WSL2 + Docker | Ollama | 3-6 秒/张 | 有虚拟化开销 |
 
 ### M2 Mac (16GB) 实测
 
 | 部署方式 | 分析速度 | 备注 |
 |----------|----------|------|
-| **Ollama 原生** ⭐ | 1-3 秒/张 | Metal 加速 |
+| **心流 API** ⭐ | 3-5 秒/张 | 无需本地模型 |
+| **Ollama 原生** | 1-3 秒/张 | Metal 加速 |
 | Docker | 3-5 秒/张 | 无 GPU 加速 |
 
 ## 🛠️ 开发计划
@@ -194,12 +221,15 @@ volumes:
 - [x] 拍立得模板渲染
 - [x] Web 管理界面
 - [x] Windows 原生支持
+- [x] 心流 API 支持（云端 AI）
+- [x] HEIC 格式自动转码
 
 ### Phase 2: 增强功能 🚧
+- [x] 照片评分筛选（按回忆分/美观分）
+- [x] HEIC 格式支持 + 缓存自动清理
 - [ ] 感知哈希去重（检测相似图片）
 - [ ] PDF 批量导出
 - [ ] 多种打印模板
-- [ ] 照片评分筛选
 - [ ] 导出历史管理
 
 ### Phase 3: 高级功能 📋
@@ -235,6 +265,35 @@ git pull
 # 重新安装依赖（如果有更新）
 pip install -r requirements.txt --upgrade
 npm install
+```
+
+## 🗄️ HEIC 缓存管理
+
+HEIC 照片在首次访问时自动转码为 JPEG 并缓存。系统会自动管理缓存：
+
+**自动清理策略：**
+- 缓存上限：5GB（超过时自动删除最旧的文件）
+- 最大保留：30天未访问的缓存文件
+- 触发时机：每次访问 HEIC 照片时异步检查
+
+**管理 API：**
+
+```bash
+# 查看缓存统计
+curl http://localhost:8765/admin/cache/stats
+
+# 手动触发清理
+curl -X POST "http://localhost:8765/admin/cache/cleanup?force=true"
+```
+
+**手动清理：**
+```powershell
+# Windows
+Remove-Item -Path "backend\data\cache\heic\*" -Recurse -Force
+
+# 或
+rmdir /s /q backend\data\cache\heic
+mkdir backend\data\cache\heic
 ```
 
 ## 📄 License

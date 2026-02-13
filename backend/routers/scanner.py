@@ -49,7 +49,7 @@ async def start_scan(
 @router.get("/status", response_model=ScanStatus)
 async def get_scan_status(db: Session = Depends(get_db)):
     """获取扫描状态"""
-    from models import Photo as PhotoModel
+    from database import Photo as PhotoModel
     
     total = db.query(PhotoModel).count()
     new = db.query(PhotoModel).filter(PhotoModel.status == "pending").count()
