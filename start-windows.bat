@@ -30,46 +30,33 @@ if errorlevel 1 (
 
 echo [✓] Node.js 已安装
 
-REM 检查 Ollama
-curl -s http://localhost:11434/api/tags >nul 2>&1
-if errorlevel 1 (
+REM 检查 .env 配置
+if not exist ".env" (
     echo.
-    echo [!] Ollama 未运行或未安装
+    echo [!] .env 配置文件不存在
+    echo 正在创建默认配置...
+    echo. > .env
+    echo PHOTOS_DIR=Z:\Photos >> .env
+    echo EXPORTS_DIR=.\exports >> .env
+    echo AI_BACKEND=iflow >> .env
+    echo IFLOW_API_KEY=your-api-key-here >> .env
+    echo IFLOW_MODEL=qwen3-vl-plus >> .env
+    echo IFLOW_API_URL=https://api.iflow.cn/v1/chat/completions >> .env
     echo.
-    echo 请按以下步骤操作：
-    echo 1. 下载安装 Ollama: https://ollama.com/download/windows
-    echo 2. 安装完成后，运行: ollama serve
-    echo 3. 下载模型: ollama pull qwen3-vl:4b
-    echo.
-    echo 按任意键打开下载页面...
-    pause >nul
-    start https://ollama.com/download/windows
-    exit /b 1
+    echo [!] 请编辑 .env 文件，填入您的心流 API Key
+    echo 获取 API Key: https://platform.iflow.cn
+    notepad .env
+    pause
 )
 
-echo [✓] Ollama 正在运行
-
-REM 检查模型
-curl -s http://localhost:11434/api/tags | findstr "qwen3-vl" >nul 2>&1
-if errorlevel 1 (
-    echo.
-    echo [!] Qwen3-VL-4B 模型未找到
-    echo 正在下载模型（约 3.3GB，请耐心等待）...
-    echo.
-    ollama pull qwen3-vl:4b
-    if errorlevel 1 (
-        echo [错误] 模型下载失败
-        pause
-        exit /b 1
-    )
-)
-
-echo [✓] Qwen3-VL-4B 模型已就绪
+echo [✓] .env 配置文件已就绪
 
 REM 创建必要目录
-if not exist "data" mkdir data
-if not exist "exports" mkdir exports
-if not exist "photos" mkdir photos
+if not exist "backend\data" mkdir backend\data
+if not exist "backend\data\cache" mkdir backend\data\cache
+if not exist "backend\data\cache\heic" mkdir backend\data\cache\heic
+if not exist "backend\exports" mkdir backend\exports
+if not exist "frontend\public" mkdir frontend\public
 
 echo.
 echo ==========================================
@@ -79,7 +66,7 @@ echo.
 
 REM 启动后端
 echo [1/2] 启动后端服务...
-start "印忆后端" cmd /k "cd backend && python -m venv venv 2>nul && venv\Scripts\activate && pip install -q -r requirements.txt && python main.py"
+start "印忆后端" cmd /k "cd backend && if not exist venv (python -m venv venv) && venv\Scripts\activate && pip install -q -r requirements.txt && python main.py"
 
 REM 等待后端启动
 timeout /t 3 /nobreak >nul
@@ -106,6 +93,10 @@ echo   API 文档: http://localhost:8765/docs
 echo.
 echo 后端日志: 查看 "印忆后端" 窗口
 echo 前端日志: 查看 "印忆前端" 窗口
+echo.
+echo AI 模式: 心流 API (iflow)
+echo 如需使用本地 OllAMA，请修改 .env 文件：
+echo   AI_BACKEND=ollama
 echo.
 echo 按任意键打开浏览器...
 pause >nul
