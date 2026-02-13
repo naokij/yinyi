@@ -1,4 +1,4 @@
-﻿@echo off
+@echo off
 chcp 65001 >nul
 title YinYi - Windows Launcher
 
@@ -12,7 +12,7 @@ REM Check Python
 python --version >nul 2>&1
 if errorlevel 1 (
     echo [ERROR] Python not installed or not in PATH
-    echo Please install Python 3.11+ and check 'Add to PATH'
+    echo Please install Python 3.11+ and check "Add to PATH"
     pause
     exit /b 1
 )
@@ -29,7 +29,7 @@ if errorlevel 1 (
 echo [OK] Node.js installed
 
 REM Check .env config
-if not exist '.env' (
+if not exist ".env" (
     echo.
     echo [!] .env file not found, creating default config...
     echo PHOTOS_DIR=Z:\Photos > .env
@@ -47,10 +47,10 @@ if not exist '.env' (
 echo [OK] .env config ready
 
 REM Create directories
-if not exist 'backend\data' mkdir 'backend\data'
-if not exist 'backend\data\cache\heic' mkdir 'backend\data\cache\heic'
-if not exist 'backend\exports' mkdir 'backend\exports'
-if not exist 'frontend\public' mkdir 'frontend\public'
+if not exist "backend\data" mkdir "backend\data"
+if not exist "backend\data\cache\heic" mkdir "backend\data\cache\heic"
+if not exist "backend\exports" mkdir "backend\exports"
+if not exist "frontend\public" mkdir "frontend\public"
 echo [OK] Directories created
 
 echo.
@@ -61,7 +61,7 @@ echo.
 
 REM Start Backend
 echo [1/2] Starting Backend Service...
-start 'YinYi Backend' cmd /k 'cd backend && python -m venv venv 2>nul && venv\Scriptsctivate.bat && pip install -q -r requirements.txt && python main.py'
+start "YinYi Backend" cmd /k "cd backend && python -m venv venv 2>nul && venv\Scripts\activate.bat && pip install -q -r requirements.txt && python main.py"
 
 echo     Waiting for backend...
 ping 127.0.0.1 -n 4 >nul
@@ -75,7 +75,7 @@ if errorlevel 1 (
 
 REM Start Frontend
 echo [2/2] Starting Frontend Service...
-start 'YinYi Frontend' cmd /k 'cd frontend && npm install && npm run dev'
+start "YinYi Frontend" cmd /k "cd frontend && npm install && npm run dev"
 
 echo.
 echo ==========================================
