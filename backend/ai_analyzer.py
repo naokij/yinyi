@@ -148,7 +148,16 @@ def call_iflow(image_base64: str, prompt: str, api_key: str, base_url: str, mode
         timeout=120.0
     )
     response.raise_for_status()
-    return parse_result(response.json()["choices"][0]["message"]["content"])
+    
+    # Debug: print response structure
+    resp_json = response.json()
+    print(f"  [DEBUG] Response keys: {list(resp_json.keys())}")
+    
+    if "choices" not in resp_json:
+        print(f"  [DEBUG] Full response: {resp_json}")
+        raise ValueError(f"API response missing 'choices' key. Keys: {list(resp_json.keys())}")
+    
+    return parse_result(resp_json["choices"][0]["message"]["content"])
 
 
 def generate_caption(image_base64: str, description: str, api_key: str, base_url: str, model: str) -> str:
