@@ -41,6 +41,8 @@ ENV/
 # Project specific - DO NOT commit these
 data/*.db
 data/*.db-journal
+backend/data/
+backend/exports/
 exports/*.png
 exports/*.pdf
 photos/*
