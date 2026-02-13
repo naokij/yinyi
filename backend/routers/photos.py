@@ -60,7 +60,7 @@ class PhotoListResponse(BaseModel):
 async def list_photos(
     status: Optional[str] = None,
     page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
+    page_size: int = Query(20, ge=1, le=5000),
     sort_by: str = Query("taken_at", regex="^(taken_at|scanned_at|memory_score|aesthetic_score)$"),
     sort_order: str = Query("desc", regex="^(asc|desc)$"),
     db: Session = Depends(get_db)

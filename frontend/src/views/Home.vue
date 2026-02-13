@@ -110,33 +110,42 @@ export default {
     }
     
     const analyzeAll = async () => {
-      // 获取所有待分析的照片
-      const maxAnalyze = 10000  // 支持最多分析10000张照片
-      
-      // 先获取足够多的待分析照片
-      await photoStore.fetchPhotos({ 
-        status: 'pending', 
-        page: 1, 
-        page_size: maxAnalyze 
-      })
-      
-      const pendingIds = photoStore.photos.map(p => p.id)
-      if (pendingIds.length === 0) {
-        alert('没有待分析的照片')
-        return
-      }
-      
-      const idsToAnalyze = pendingIds
-      const totalPending = photoStore.total
-      
-      let confirmMsg
-      confirmMsg = `确定要分析 ${totalPending} 张照片吗？这可能需要较长时间。`
-      
-      if (confirm(confirmMsg)) {
-        await photoStore.batchAnalyze(idsToAnalyze)
-        alert('分析任务已启动，请稍后查看结果')
-        // 刷新照片列表
-        photoStore.fetchPhotos()
+      try {
+        // 获取所有待分析的照片
+        const maxAnalyze = 5000  // 每次最多分析5000张照片
+        
+        // 先获取足够多的待分析照片
+        await photoStore.fetchPhotos({ 
+          status: 'pending', 
+          page: 1, 
+          page_size: maxAnalyze 
+        })
+        
+        const pendingIds = photoStore.photos.map(p => p.id)
+        if (pendingIds.length === 0) {
+          alert('没有待分析的照片')
+          return
+        }
+        
+        const idsToAnalyze = pendingIds
+        const totalPending = photoStore.total
+        
+        let confirmMsg
+        if (totalPending > maxAnalyze) {
+          confirmMsg = `共有 ${totalPending} 张待分析照片。\n将分析前 ${idsToAnalyze.length} 张，可多次点击继续分析。\n\n确定开始吗？`
+        } else {
+          confirmMsg = `确定要分析 ${totalPending} 张照片吗？这可能需要较长时间。`
+        }
+        
+        if (confirm(confirmMsg)) {
+          await photoStore.batchAnalyze(idsToAnalyze)
+          alert(`已启动分析 ${idsToAnalyze.length} 张照片。请稍后查看结果。`)
+          // 刷新照片列表
+          photoStore.fetchPhotos()
+        }
+      } catch (error) {
+        console.error('分析失败:', error)
+        alert('启动分析失败: ' + (error.response?.data?.detail || error.message || '未知错误'))
       }
     }
     
