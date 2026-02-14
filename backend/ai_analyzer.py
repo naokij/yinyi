@@ -7,6 +7,8 @@ import base64
 from pathlib import Path
 import httpx
 import os
+import threading
+import time
 
 from dotenv import load_dotenv
 env_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env")
@@ -14,6 +16,9 @@ load_dotenv(env_path, override=True)
 
 from database import SessionLocal, Photo as PhotoModel, Analysis as AnalysisModel
 from config import settings
+
+# iflow API 并发限制为 1，使用锁确保同时只分析一张照片
+iflow_lock = threading.Lock()
 
 
 ANALYSIS_PROMPT = """你是一个个人相册照片评估助手，擅长理解真实照片内容并从回忆价值和美观角度打分。
@@ -228,35 +233,68 @@ def analyze_photo_task(photo_id: int):
         print(f"  AI 后端: {ai_backend}")
 
         try:
-            # 第一次调用：打分
+            # iflow API 并发限制为 1，使用锁
             if ai_backend == "iflow":
-                score_result = call_iflow(image_base64, ANALYSIS_PROMPT, api_key, base_url, model)
+                print(f"  [iflow] 等待锁，确保单并发...")
+                with iflow_lock:
+                    print(f"  [iflow] 获取锁，开始分析...")
+                    # 第一次调用：打分
+                    score_result = call_iflow(image_base64, ANALYSIS_PROMPT, api_key, base_url, model)
+                    
+                    memory_score = float(score_result.get("memory_score", 50.0))
+                    aesthetic_score = float(score_result.get("beauty_score", 50.0))
+                    photo_type = score_result.get("type", "")
+                    description = score_result.get("description", "")
+                    reason = score_result.get("reason", "")
+                    
+                    print(f"  评分完成: 回忆分={memory_score:.1f}, 美观分={aesthetic_score:.1f}")
+                    
+                    # 第二次调用：生成文案（仅高分照片：回忆分 >= 60）
+                    caption = ""
+                    if memory_score >= 60:
+                        print(f"  正在生成文案...")
+                        caption = generate_caption(image_base64, description, api_key, base_url, model)
+                        print(f"  文案: {caption[:30] if caption else '(无)'}...")
+                    else:
+                        print(f"  回忆分 < 60，跳过文案生成")
+                    
+                    print(f"  [iflow] 释放锁")
             elif ai_backend == "ollama":
                 score_result = call_ollama(image_base64, ANALYSIS_PROMPT, "http://localhost:11434", model)
+                
+                memory_score = float(score_result.get("memory_score", 50.0))
+                aesthetic_score = float(score_result.get("beauty_score", 50.0))
+                photo_type = score_result.get("type", "")
+                description = score_result.get("description", "")
+                reason = score_result.get("reason", "")
+                
+                print(f"  评分完成: 回忆分={memory_score:.1f}, 美观分={aesthetic_score:.1f}")
+                
+                caption = ""
+                if memory_score >= 60:
+                    print(f"  正在生成文案...")
+                    caption = generate_caption(image_base64, description, "", "http://localhost:11434", model)
+                    print(f"  文案: {caption[:30] if caption else '(无)'}...")
+                else:
+                    print(f"  回忆分 < 60，跳过文案生成")
             else:
                 score_result = call_vllm(image_base64, ANALYSIS_PROMPT, os.getenv("VLLM_HOST"), model)
-
-            print(f"  AI 返回原始内容: {str(score_result)[:200]}...")
-
-            memory_score = float(score_result.get("memory_score", 50.0))
-            aesthetic_score = float(score_result.get("beauty_score", 50.0))
-            photo_type = score_result.get("type", "")
-            description = score_result.get("description", "")
-            reason = score_result.get("reason", "")
-
-            print(f"  评分完成: 回忆分={memory_score:.1f}, 美观分={aesthetic_score:.1f}")
-
-            # 第二次调用：生成文案（仅高分照片：回忆分 >= 60）
-            caption = ""
-            if memory_score >= 60:
-                print(f"  正在生成文案...")
-                if ai_backend == "iflow":
-                    caption = generate_caption(image_base64, description, api_key, base_url, model)
-                elif ai_backend == "ollama":
-                    caption = generate_caption(image_base64, description, "", "http://localhost:11434", model)
-                print(f"  文案: {caption[:30] if caption else '(无)'}...")
-            else:
-                print(f"  回忆分 < 60，跳过文案生成")
+                
+                memory_score = float(score_result.get("memory_score", 50.0))
+                aesthetic_score = float(score_result.get("beauty_score", 50.0))
+                photo_type = score_result.get("type", "")
+                description = score_result.get("description", "")
+                reason = score_result.get("reason", "")
+                
+                print(f"  评分完成: 回忆分={memory_score:.1f}, 美观分={aesthetic_score:.1f}")
+                
+                caption = ""
+                if memory_score >= 60:
+                    print(f"  正在生成文案...")
+                    caption = generate_caption(image_base64, description, "", os.getenv("VLLM_HOST"), model)
+                    print(f"  文案: {caption[:30] if caption else '(无)'}...")
+                else:
+                    print(f"  回忆分 < 60，跳过文案生成")
 
             analysis = AnalysisModel(
                 photo_id=photo.id,
