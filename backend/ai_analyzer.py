@@ -133,36 +133,58 @@ def call_ollama(image_base64: str, prompt: str, api_url: str, model: str) -> dic
 
 def call_iflow(image_base64: str, prompt: str, api_key: str, base_url: str, model: str) -> dict:
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-    response = httpx.post(
-        f"{base_url}/chat/completions",
-        headers=headers,
-        json={
-            "model": model,
-            "messages": [
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": prompt},
-                        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}}
-                    ]
-                }
-            ],
-            "max_tokens": 500,
-            "temperature": 0.7
-        },
-        timeout=120.0
-    )
-    response.raise_for_status()
     
-    # Debug: print response structure
-    resp_json = response.json()
-    print(f"  [DEBUG] Response keys: {list(resp_json.keys())}")
+    # 构建请求体
+    request_body = {
+        "model": model,
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": prompt},
+                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}}
+                ]
+            }
+        ],
+        "max_tokens": 500,
+        "temperature": 0.7
+    }
     
-    if "choices" not in resp_json:
-        print(f"  [DEBUG] Full response: {resp_json}")
-        raise ValueError(f"API response missing 'choices' key. Keys: {list(resp_json.keys())}")
+    print(f"  [DEBUG] Request URL: {base_url}/chat/completions")
+    print(f"  [DEBUG] Model: {model}")
+    print(f"  [DEBUG] Image base64 length: {len(image_base64)} chars")
     
-    return parse_result(resp_json["choices"][0]["message"]["content"])
+    try:
+        response = httpx.post(
+            f"{base_url}/chat/completions",
+            headers=headers,
+            json=request_body,
+            timeout=120.0
+        )
+        
+        # 详细记录错误信息
+        if response.status_code == 400:
+            print(f"  [ERROR] HTTP 400 Bad Request")
+            print(f"  [ERROR] Response body: {response.text}")
+            print(f"  [ERROR] Request headers: {headers}")
+            raise ValueError(f"API 400 Error: {response.text}")
+        
+        response.raise_for_status()
+        
+        # Debug: print response structure
+        resp_json = response.json()
+        print(f"  [DEBUG] Response keys: {list(resp_json.keys())}")
+        
+        if "choices" not in resp_json:
+            print(f"  [DEBUG] Full response: {resp_json}")
+            raise ValueError(f"API response missing 'choices' key. Keys: {list(resp_json.keys())}")
+        
+        return parse_result(resp_json["choices"][0]["message"]["content"])
+        
+    except httpx.HTTPStatusError as e:
+        print(f"  [ERROR] HTTP Error: {e.response.status_code}")
+        print(f"  [ERROR] Response: {e.response.text}")
+        raise
 
 
 def generate_caption(image_base64: str, description: str, api_key: str, base_url: str, model: str) -> str:
