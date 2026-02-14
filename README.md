@@ -48,6 +48,7 @@
    - Python 3.11+ (勾选 "Add to PATH")
    - Node.js 18+
    - Git for Windows
+   - Visual C++ Redistributable (Windows 上 pillow-heif 需要)
 
 2. **选择 AI 后端**（二选一）
 
