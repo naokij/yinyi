@@ -82,9 +82,65 @@ CAPTION_PROMPT = """你是一位为电子相框撰写旁白的中文文案助手
 - 不要出现"这张照片"、"这一刻"、"那天"等指代照片本身的词"""
 
 
-def encode_image_to_base64(image_path: str) -> str:
+def encode_image_to_base64(image_path: str, max_size_mb: float = 9.5) -> str:
+    """
+    将图片转为 base64，如果超过限制则压缩
+    iflow API 限制: 10MB (10485760 bytes)
+    """
+    from PIL import Image
+    import io
+    
+    max_bytes = int(max_size_mb * 1024 * 1024)  # 9.5MB = 9961472 bytes
+    
+    # 先尝试直接读取
     with open(image_path, "rb") as f:
-        return base64.b64encode(f.read()).decode("utf-8")
+        data = f.read()
+    
+    # 如果小于限制，直接返回
+    if len(data) <= max_bytes:
+        return base64.b64encode(data).decode("utf-8")
+    
+    # 需要压缩
+    print(f"  [压缩] 图片 {len(data)/1024/1024:.1f}MB 超过限制，开始压缩...")
+    
+    img = Image.open(image_path)
+    
+    # 转换为 RGB（去除透明通道）
+    if img.mode in ('RGBA', 'P'):
+        img = img.convert('RGB')
+    
+    # 逐步降低质量和尺寸直到满足要求
+    quality = 85
+    max_dimension = 2048  # 最大边长
+    
+    while True:
+        # 调整尺寸
+        if max(img.size) > max_dimension:
+            ratio = max_dimension / max(img.size)
+            new_size = (int(img.size[0] * ratio), int(img.size[1] * ratio))
+            img_resized = img.resize(new_size, Image.Resampling.LANCZOS)
+        else:
+            img_resized = img
+        
+        # 保存到内存
+        buffer = io.BytesIO()
+        img_resized.save(buffer, format='JPEG', quality=quality, optimize=True)
+        buffer.seek(0)
+        compressed_data = buffer.read()
+        
+        if len(compressed_data) <= max_bytes:
+            print(f"  [压缩] 完成: {len(compressed_data)/1024/1024:.1f}MB (尺寸: {img_resized.size}, 质量: {quality})")
+            return base64.b64encode(compressed_data).decode("utf-8")
+        
+        # 还太大，继续压缩
+        if quality > 50:
+            quality -= 10
+        elif max_dimension > 1024:
+            max_dimension -= 256
+        else:
+            # 实在压不到 10MB，返回压缩后的版本（可能会报错，但尽力了）
+            print(f"  [压缩] 警告: 无法压缩到 {max_size_mb}MB 以下，当前 {len(compressed_data)/1024/1024:.1f}MB")
+            return base64.b64encode(compressed_data).decode("utf-8")
 
 
 def parse_result(content: str) -> dict:
