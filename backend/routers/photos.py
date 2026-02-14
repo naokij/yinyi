@@ -139,6 +139,9 @@ async def get_photo_file(photo_id: int, db: Session = Depends(get_db)):
         # 如果缓存不存在，转码
         if not cache_path.exists():
             try:
+                # 确保缓存目录存在
+                cache_path.parent.mkdir(parents=True, exist_ok=True)
+                
                 from PIL import Image
                 from pillow_heif import register_heif_opener
                 
