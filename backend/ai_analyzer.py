@@ -84,22 +84,31 @@ CAPTION_PROMPT = """你是一位为电子相框撰写旁白的中文文案助手
 - 不要出现"这张照片"、"这一刻"、"那天"等指代照片本身的词"""
 
 
-def encode_image_to_base64(image_path: str, max_size_mb: float = 9.5) -> str:
+def encode_image_to_base64(image_path: str, max_size_mb: float = 7.0) -> str:
     """
     将图片转为 base64，如果超过限制则压缩
-    iflow API 限制: 10MB (10485760 bytes)
+    iflow API 限制: 10MB base64 (10485760 bytes)
+    base64 编码会增加约 33% 大小，所以原始图片需要控制在 7MB 以内
     """
     from PIL import Image
     import io
     
-    max_bytes = int(max_size_mb * 1024 * 1024)  # 9.5MB = 9961472 bytes
+    # base64 编码后增加约 33%，所以原始图片最大约 7MB
+    max_bytes = int(max_size_mb * 1024 * 1024)  # 7MB = 7340032 bytes
+    max_base64_bytes = int(9.5 * 1024 * 1024)  # base64 后最大 9.5MB
     
     # 先尝试直接读取
     with open(image_path, "rb") as f:
         data = f.read()
     
-    # 如果小于限制，直接返回
-    if len(data) <= max_bytes:
+    # 预估 base64 编码后的大小
+    estimated_base64_size = len(data) * 4 // 3
+    
+    print(f"  [DEBUG] 原始图片: {len(data)/1024/1024:.2f}MB, 预估base64: {estimated_base64_size/1024/1024:.2f}MB")
+    
+    # 如果预估 base64 小于 9.5MB，直接返回
+    if estimated_base64_size <= max_base64_bytes:
+        print(f"  [DEBUG] 无需压缩")
         return base64.b64encode(data).decode("utf-8")
     
     # 需要压缩
