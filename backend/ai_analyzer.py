@@ -20,6 +20,8 @@ from config import settings
 # iflow API 并发限制为 1，使用锁确保同时只分析一张照片
 iflow_lock = threading.Lock()
 
+print("[AI模块] 已加载 - 支持图片自动压缩(10MB限制)")
+
 
 ANALYSIS_PROMPT = """你是一个个人相册照片评估助手，擅长理解真实照片内容并从回忆价值和美观角度打分。
 
