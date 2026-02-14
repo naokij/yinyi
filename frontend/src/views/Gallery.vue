@@ -8,6 +8,7 @@
             <option value="">全部</option>
             <option value="analyzed">已分析</option>
             <option value="pending">待处理</option>
+            <option value="error">分析失败</option>
             <option value="duplicate">重复</option>
           </select>
           <select v-model="photoStore.sortBy" @change="onSortChange">
@@ -18,6 +19,13 @@
           <span class="sort-indicator" v-if="photoStore.sortBy !== 'taken_at'">
             {{ sortLabels[photoStore.sortBy] }}
           </span>
+          <button 
+            v-if="photoStore.filterStatus === 'error' && photoStore.photos.length > 0" 
+            class="reset-error-btn"
+            @click="resetErrorPhotos"
+          >
+            重置 {{ photoStore.photos.length }} 张失败照片
+          </button>
         </div>
     </header>
     
@@ -174,6 +182,33 @@ export default {
       }
     }
 
+    const resetErrorPhotos = async () => {
+      const errorPhotos = photoStore.photos.filter(p => p.status === 'error')
+      if (errorPhotos.length === 0) {
+        alert('当前页面没有错误照片')
+        return
+      }
+      
+      const confirmed = confirm(`确定要重置 ${errorPhotos.length} 张分析失败的照片吗？\n重置后它们将重新变为"待分析"状态。`)
+      if (!confirmed) return
+      
+      let successCount = 0
+      let failCount = 0
+      
+      for (const photo of errorPhotos) {
+        try {
+          await photoStore.reanalyzePhoto(photo.id)
+          successCount++
+        } catch (e) {
+          failCount++
+          console.error(`重置照片 ${photo.id} 失败:`, e)
+        }
+      }
+      
+      alert(`重置完成！\n成功: ${successCount} 张\n失败: ${failCount} 张\n\n请刷新页面查看。`)
+      photoStore.fetchPhotos()
+    }
+
     return {
       photoStore,
       statusText,
@@ -184,7 +219,8 @@ export default {
       onSortChange,
       viewPhoto,
       formatDate,
-      handleImageError
+      handleImageError,
+      resetErrorPhotos
     }
   }
 }
@@ -313,6 +349,28 @@ export default {
 .status-badge.duplicate {
   background: #f8d7da;
   color: #721c24;
+}
+
+.status-badge.error {
+  background: #dc3545;
+  color: white;
+  font-weight: bold;
+}
+
+.reset-error-btn {
+  background: #dc3545;
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  margin-left: 10px;
+  font-weight: 500;
+}
+
+.reset-error-btn:hover {
+  background: #c82333;
 }
 
 .photo-info {

@@ -94,4 +94,4 @@ echo For local Ollama, edit .env: AI_BACKEND=ollama
 echo.
 echo Press any key to open browser... (or close this window)
 pause >nul
-start http://localhost:8080
+start http://localhost:3000
