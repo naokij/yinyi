@@ -75,16 +75,21 @@ if errorlevel 1 (
 
 REM Start Frontend
 echo [2/2] Starting Frontend Service...
-start "YinYi Frontend" cmd /k "cd frontend && npm install && npm run dev"
+start "YinYi Frontend" cmd /k "cd frontend && npm install && npm run dev -- --host 0.0.0.0"
 
 echo.
 echo ==========================================
 echo    Services Started!
 echo ==========================================
 echo.
-echo Access:
-echo   Web UI: http://localhost:8080
-echo   API Docs: http://localhost:8765/docs
+echo Access URLs:
+echo   Local:   http://localhost:3000
+echo   LAN:     http://%COMPUTERNAME%:3000  (replace %%COMPUTERNAME%% with your PC's IP)
+echo   API:     http://localhost:8765/docs
+echo.
+echo To access from other devices in LAN:
+echo   1. Check your PC's IP: ipconfig
+echo   2. Use http://[YOUR_IP]:3000
 echo.
 echo Backend Log: Check 'YinYi Backend' window
 echo Frontend Log: Check 'YinYi Frontend' window
