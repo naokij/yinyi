@@ -227,6 +227,32 @@ POST /admin/cache/cleanup?force=true
 
 ---
 
+## 重启保护机制
+
+### 问题背景
+分析照片时，如果后端意外重启：
+- 状态为 `analyzing` 的照片会卡住
+- 再次点击分析会跳过这些照片
+
+### 解决方案
+**文件**: `backend/main.py`
+
+启动时自动重置卡住的照片：
+```python
+# 启动时检查 analyzing 状态的照片
+stuck_photos = db.query(Photo).filter(Photo.status == "analyzing").all()
+for photo in stuck_photos:
+    photo.status = "pending"
+db.commit()
+```
+
+### 效果
+- 重启后自动恢复中断的分析任务
+- 用户无需手动干预
+- 不会浪费已完成的进度
+
+---
+
 ## 开发工作流程
 
 ### 1. 环境搭建（新机器）
@@ -238,60 +264,61 @@ POST /admin/cache/cleanup?force=true
 winget install Git.Git
 winget install Python.Python.3.11
 winget install OpenJS.NodeJS
-# Ollama需手动下载：https://ollama.com/download/windows
 
-# 2. 下载AI模型
-ollama serve          # 保持运行
-ollama pull qwen3-vl:4b
-
-# 3. 克隆项目
+# 2. 克隆项目
 git clone https://github.com/naokij/yinyi.git
 cd yinyi
+
+# 3. 配置环境变量
+# 复制 .env.example 为 .env，填入心流 API Key
+notepad .env
 
 # 4. 映射NAS照片
 net use Z: \\<NAS_IP>\homes\jiangle\Photos /persistent:yes
 
-# 5. 安装后端依赖
-cd backend
-python -m venv venv
-venv\Scripts\activate
-pip install -r requirements.txt
-cd ..
-
-# 6. 安装前端依赖
-cd frontend
-npm install
-cd ..
-
-# 7. 启动
+# 5. 启动服务（自动安装依赖）
 .\start-windows.bat
+```
+
+**可选：本地 Ollama（需要 16GB+ 内存）**
+```powershell
+# 安装 Ollama: https://ollama.com/download/windows
+ollama serve
+ollama pull qwen3-vl:4b
+# 修改 .env: AI_BACKEND=ollama
 ```
 
 ### 2. 日常开发
 
-**启动服务（3个终端）：**
-
-终端1 - Ollama:
+**启动服务（使用启动脚本）：**
 ```powershell
-ollama serve
+cd yinyi
+.\start-windows.bat    # 启动后端和前端
+.\stop-windows.bat     # 停止所有服务
 ```
 
-终端2 - 后端:
+**或手动启动（2个终端）：**
+
+终端1 - 后端:
 ```powershell
 cd yinyi\backend
 venv\Scripts\activate
 python main.py
 ```
 
-终端3 - 前端:
+终端2 - 前端:
 ```powershell
 cd yinyi\frontend
-npm run dev
+npm run dev -- --host 0.0.0.0  # 支持局域网访问
 ```
 
 **访问：**
-- Web界面：http://localhost:8080
+- 本地访问：http://localhost:3000
+- 局域网访问：http://[你的IP]:3000
 - API文档：http://localhost:8765/docs
+
+**防火墙设置（局域网访问）：**
+详见 [docs/FIREWALL-SETUP.md](FIREWALL-SETUP.md)
 
 ### 3. 代码提交
 

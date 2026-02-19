@@ -79,8 +79,11 @@
    ```
 
 5. **访问应用**
-   - Web 界面：http://localhost:8080
+   - 本地访问：http://localhost:3000
+   - 局域网访问：http://[你的IP]:3000
    - API 文档：http://localhost:8765/docs
+
+**局域网访问设置**：见 [docs/FIREWALL-SETUP.md](docs/FIREWALL-SETUP.md)
 
 **详细文档**：见 [docs/WINDOWS-DEPLOY.md](docs/WINDOWS-DEPLOY.md)
 
