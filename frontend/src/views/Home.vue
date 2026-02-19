@@ -46,12 +46,13 @@
       <div class="card quick-actions">
         <h2>⚡ 快速操作</h2>
         <div class="action-list">
-          <div class="action-item" @click="analyzeAll">
+          <div class="action-item" @click="analyzeAll" :class="{ 'disabled': analyzing }">
             <span class="icon">🤖</span>
             <div class="action-info">
-              <h3>AI 分析全部</h3>
-              <p>为待处理照片生成温馨文案</p>
+              <h3>{{ analyzing ? '分析中...' : 'AI 分析照片' }}</h3>
+              <p>{{ analyzing ? `正在分析，请稍候...` : `待处理: ${photoStore.scanStatus.pending} 张照片` }}</p>
             </div>
+            <div v-if="analyzing" class="spinner"></div>
           </div>
           
           <div class="action-item" @click="goToHighlights">
@@ -62,6 +63,13 @@
             </div>
           </div>
         </div>
+        
+        <!-- Toast 通知 -->
+        <transition name="toast">
+          <div v-if="toast.show" class="toast" :class="toast.type">
+            {{ toast.message }}
+          </div>
+        </transition>
       </div>
       
       <!-- 最近导出 -->
@@ -84,6 +92,8 @@ export default {
     const router = useRouter()
     const photoStore = usePhotoStore()
     const scanning = ref(false)
+    const analyzing = ref(false)
+    const toast = ref({ show: false, message: '', type: 'success' })
     
     const pending = computed(() => 
       photoStore.scanStatus.total_photos - 
@@ -95,6 +105,13 @@ export default {
       photoStore.fetchPhotos()
       photoStore.pollScanStatus()
     })
+    
+    const showToast = (message, type = 'success') => {
+      toast.value = { show: true, message, type }
+      setTimeout(() => {
+        toast.value.show = false
+      }, 3000)
+    }
     
     const startScan = async () => {
       scanning.value = true
@@ -110,6 +127,9 @@ export default {
     }
     
     const analyzeAll = async () => {
+      if (analyzing.value) return
+      
+      analyzing.value = true
       try {
         // 获取所有待分析的照片
         const maxAnalyze = 5000  // 每次最多分析5000张照片
@@ -123,7 +143,7 @@ export default {
         
         const pendingIds = photoStore.photos.map(p => p.id)
         if (pendingIds.length === 0) {
-          alert('没有待分析的照片')
+          showToast('没有待分析的照片', 'warning')
           return
         }
         
@@ -134,18 +154,29 @@ export default {
         if (totalPending > maxAnalyze) {
           confirmMsg = `共有 ${totalPending} 张待分析照片。\n将分析前 ${idsToAnalyze.length} 张，可多次点击继续分析。\n\n确定开始吗？`
         } else {
-          confirmMsg = `确定要分析 ${totalPending} 张照片吗？这可能需要较长时间。`
+          confirmMsg = `确定要分析 ${totalPending} 张照片吗？`
         }
         
         if (confirm(confirmMsg)) {
-          await photoStore.batchAnalyze(idsToAnalyze)
-          alert(`已启动分析 ${idsToAnalyze.length} 张照片。请稍后查看结果。`)
-          // 刷新照片列表
-          photoStore.fetchPhotos()
+          showToast('正在启动分析...', 'info')
+          
+          const result = await photoStore.batchAnalyze(idsToAnalyze)
+          
+          // 处理返回结果
+          if (result.analyzing > 0) {
+            showToast(`${result.analyzing} 张照片正在分析中，已跳过`, 'warning')
+          } else if (result.queued > 0) {
+            showToast(`已启动分析 ${result.queued} 张照片`, 'success')
+          }
+          
+          // 刷新状态
+          photoStore.pollScanStatus()
         }
       } catch (error) {
         console.error('分析失败:', error)
-        alert('启动分析失败: ' + (error.response?.data?.detail || error.message || '未知错误'))
+        showToast('启动分析失败: ' + (error.response?.data?.detail || error.message || '未知错误'), 'error')
+      } finally {
+        analyzing.value = false
       }
     }
     
@@ -159,7 +190,9 @@ export default {
     return {
       photoStore,
       scanning,
+      analyzing,
       pending,
+      toast,
       startScan,
       goToGallery,
       analyzeAll,
@@ -295,6 +328,65 @@ export default {
 
 .action-item:hover {
   background: #e9ecef;
+}
+
+.action-item.disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid #667eea;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin-left: auto;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.toast {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 12px 24px;
+  border-radius: 8px;
+  color: white;
+  font-size: 14px;
+  z-index: 1000;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.toast.success {
+  background: #10b981;
+}
+
+.toast.error {
+  background: #ef4444;
+}
+
+.toast.warning {
+  background: #f59e0b;
+}
+
+.toast.info {
+  background: #3b82f6;
+}
+
+.toast-enter-active,
+.toast-leave-active {
+  transition: all 0.3s ease;
+}
+
+.toast-enter-from,
+.toast-leave-to {
+  opacity: 0;
+  transform: translateX(-50%) translateY(20px);
 }
 
 .icon {

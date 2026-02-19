@@ -42,9 +42,10 @@
             :src="`/api/photos/${photo.id}/file`"
             :alt="photo.filename"
             loading="lazy"
-            @error="handleImageError"
+            @load="handleImageLoad($event, photo)"
+            @error="handleImageError($event, photo)"
           />
-          <div class="placeholder" v-if="!photo._imgLoaded">
+          <div class="placeholder" v-show="photo._imgError || !photo._imgLoaded">
             <span>{{ photo.filename.slice(0, 2) }}</span>
           </div>
           <div class="status-badge" :class="photo.status">
@@ -165,7 +166,12 @@ export default {
       })
     }
 
-    const handleImageError = (event) => {
+    const handleImageLoad = (event, photo) => {
+      photo._imgLoaded = true
+      photo._imgError = false
+    }
+
+    const handleImageError = (event, photo) => {
       const img = event.target
       const retryCount = parseInt(img.dataset.retryCount || '0')
       
@@ -173,12 +179,11 @@ export default {
         // 重试，添加时间戳避免缓存
         img.dataset.retryCount = (retryCount + 1).toString()
         setTimeout(() => {
-          img.src = img.src + (img.src.includes('?') ? '&' : '?') + 'retry=' + Date.now()
+          img.src = img.src.split('?')[0] + '?retry=' + Date.now()
         }, 500)
       } else {
-        // 重试失败，显示占位符
-        img.style.display = 'none'
-        img.nextElementSibling.style.display = 'flex'
+        // 重试失败，标记错误
+        photo._imgError = true
       }
     }
 
@@ -219,6 +224,7 @@ export default {
       onSortChange,
       viewPhoto,
       formatDate,
+      handleImageLoad,
       handleImageError,
       resetErrorPhotos
     }

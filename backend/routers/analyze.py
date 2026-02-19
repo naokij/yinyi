@@ -59,13 +59,17 @@ async def batch_analyze(
         missing = set(request.photo_ids) - found_ids
         raise HTTPException(status_code=404, detail=f"照片不存在: {missing}")
     
-    # 过滤已分析的照片（除非强制重新分析）
+    # 过滤已分析和正在分析的照片（除非强制重新分析）
     to_analyze = []
     already_analyzed = []
+    currently_analyzing = []
     
     for photo in photos:
         if photo.status == "analyzed" and not request.force_reanalyze:
             already_analyzed.append(photo.id)
+        elif photo.status == "analyzing":
+            # 跳过正在分析的照片，避免重复添加
+            currently_analyzing.append(photo.id)
         else:
             to_analyze.append(photo.id)
             photo.status = "pending"
@@ -81,7 +85,9 @@ async def batch_analyze(
         "total": len(request.photo_ids),
         "queued": len(to_analyze),
         "skipped": len(already_analyzed),
-        "skipped_ids": already_analyzed
+        "analyzing": len(currently_analyzing),
+        "skipped_ids": already_analyzed,
+        "analyzing_ids": currently_analyzing
     }
 
 
