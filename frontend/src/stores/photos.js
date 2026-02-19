@@ -15,6 +15,7 @@ export const usePhotoStore = defineStore('photos', {
       status: 'idle',
       total_photos: 0,
       new_photos: 0,
+      pending: 0,
       duplicate_photos: 0,
       analyzing: 0,
       analyzed: 0

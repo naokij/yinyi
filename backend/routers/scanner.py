@@ -24,6 +24,7 @@ class ScanStatus(BaseModel):
     status: str
     total_photos: int
     new_photos: int
+    pending: int  # 待分析数量
     duplicate_photos: int
     analyzing: int
     analyzed: int
@@ -61,6 +62,7 @@ async def get_scan_status(db: Session = Depends(get_db)):
         status="running" if new > 0 or analyzing > 0 else "idle",
         total_photos=total,
         new_photos=new,
+        pending=new,  # 待分析数量
         duplicate_photos=duplicate,
         analyzing=analyzing,
         analyzed=analyzed

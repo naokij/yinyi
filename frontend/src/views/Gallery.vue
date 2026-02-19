@@ -42,10 +42,10 @@
             :src="`/api/photos/${photo.id}/file`"
             :alt="photo.filename"
             loading="lazy"
-            @load="handleImageLoad($event, photo)"
+            @load="event => event.target.style.opacity = 1"
             @error="handleImageError($event, photo)"
           />
-          <div class="placeholder" v-show="photo._imgError || !photo._imgLoaded">
+          <div class="placeholder">
             <span>{{ photo.filename.slice(0, 2) }}</span>
           </div>
           <div class="status-badge" :class="photo.status">
@@ -166,11 +166,6 @@ export default {
       })
     }
 
-    const handleImageLoad = (event, photo) => {
-      photo._imgLoaded = true
-      photo._imgError = false
-    }
-
     const handleImageError = (event, photo) => {
       const img = event.target
       const retryCount = parseInt(img.dataset.retryCount || '0')
@@ -181,10 +176,8 @@ export default {
         setTimeout(() => {
           img.src = img.src.split('?')[0] + '?retry=' + Date.now()
         }, 500)
-      } else {
-        // 重试失败，标记错误
-        photo._imgError = true
       }
+      // 重试失败后图片保持透明，显示下面的 placeholder
     }
 
     const resetErrorPhotos = async () => {
@@ -224,7 +217,6 @@ export default {
       onSortChange,
       viewPhoto,
       formatDate,
-      handleImageLoad,
       handleImageError,
       resetErrorPhotos
     }
@@ -317,6 +309,10 @@ export default {
   height: 100%;
   object-fit: cover;
   display: block;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  position: relative;
+  z-index: 1;
 }
 
 .placeholder {
@@ -330,6 +326,7 @@ export default {
   justify-content: center;
   color: #999;
   font-size: 24px;
+  z-index: 0;
 }
 
 .status-badge {
