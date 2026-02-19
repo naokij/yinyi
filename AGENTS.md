@@ -349,7 +349,10 @@ frontend/
 3. **HEIC Support**: Uses Pillow + pillow-heif for conversion
 4. **AI Backends**: Supports Ollama (local), Iflow (cloud API), vLLM
 5. **Database**: SQLite - backup by copying `yinyi.db` file
+6. **Startup Scripts**: Use `start-windows.bat` and `stop-windows.bat` for Windows
+7. **LAN Access**: Add `--host 0.0.0.0` for frontend, configure firewall for ports 3000 and 8765
+8. **Restart Protection**: Photos stuck in `analyzing` status are auto-reset on startup
 
 ---
 
-*Last updated: 2026-02-13*
+*Last updated: 2026-02-14*
