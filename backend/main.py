@@ -28,6 +28,22 @@ async def lifespan(app: FastAPI):
     """应用生命周期管理"""
     # 启动时初始化数据库
     init_db()
+    
+    # 重置卡在 analyzing 状态的照片（上次异常退出导致的）
+    from database import SessionLocal, Photo as PhotoModel
+    db = SessionLocal()
+    try:
+        stuck_photos = db.query(PhotoModel).filter(PhotoModel.status == "analyzing").all()
+        if stuck_photos:
+            for photo in stuck_photos:
+                photo.status = "pending"
+            db.commit()
+            print(f"[启动] 重置 {len(stuck_photos)} 张卡住的照片状态为 pending")
+    except Exception as e:
+        print(f"[启动] 重置照片状态失败: {e}")
+    finally:
+        db.close()
+    
     print(f"[启动] 印忆后端服务启动成功 (AI_BACKEND={os.getenv('AI_BACKEND', 'not set')})")
     yield
     # 关闭时的清理
