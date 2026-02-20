@@ -156,10 +156,33 @@ export default {
     const toast = ref({ show: false, message: '', type: 'success' })
     let pollInterval = null
     
-    // 批次进度追踪
-    const batchStartAnalyzed = ref(0)  // 批次开始时的已分析数量
-    const batchTarget = ref(0)         // 批次目标数量
-    const batchProgress = ref(0)       // 批次已完成数量
+    // 批次进度追踪（从 localStorage 恢复）
+    const getStoredBatch = () => {
+      try {
+        const stored = localStorage.getItem('yinyi_batch')
+        if (stored) {
+          return JSON.parse(stored)
+        }
+      } catch (e) {}
+      return { startAnalyzed: 0, target: 0, timestamp: 0 }
+    }
+    
+    const saveBatch = (startAnalyzed, target) => {
+      localStorage.setItem('yinyi_batch', JSON.stringify({
+        startAnalyzed,
+        target,
+        timestamp: Date.now()
+      }))
+    }
+    
+    const clearBatch = () => {
+      localStorage.removeItem('yinyi_batch')
+    }
+    
+    const storedBatch = getStoredBatch()
+    const batchStartAnalyzed = ref(storedBatch.startAnalyzed || 0)
+    const batchTarget = ref(storedBatch.target || 0)
+    const batchProgress = ref(0)
     
     const pending = computed(() => 
       photoStore.scanStatus.total_photos - 
@@ -186,8 +209,25 @@ export default {
       pollInterval = setInterval(() => {
         photoStore.pollScanStatus().then(() => {
           // 更新批次进度
-          if (batchTarget.value > 0) {
+          if (batchTarget.value > 0 && batchStartAnalyzed.value > 0) {
             batchProgress.value = photoStore.scanStatus.analyzed - batchStartAnalyzed.value
+            
+            // 检查批次是否完成
+            if (batchProgress.value >= batchTarget.value) {
+              // 批次完成，清除存储
+              clearBatch()
+              batchTarget.value = 0
+              batchStartAnalyzed.value = 0
+              batchProgress.value = 0
+            }
+          }
+          
+          // 如果没有正在分析的照片，清除批次状态
+          if (photoStore.scanStatus.analyzing === 0 && batchTarget.value > 0) {
+            clearBatch()
+            batchTarget.value = 0
+            batchStartAnalyzed.value = 0
+            batchProgress.value = 0
           }
         })
       }, 5000)
@@ -202,7 +242,20 @@ export default {
     
     onMounted(() => {
       photoStore.fetchPhotos()
-      photoStore.pollScanStatus()
+      photoStore.pollScanStatus().then(() => {
+        // 恢复批次进度
+        if (batchTarget.value > 0 && batchStartAnalyzed.value > 0) {
+          batchProgress.value = Math.max(0, photoStore.scanStatus.analyzed - batchStartAnalyzed.value)
+          
+          // 如果批次已完成，清除
+          if (batchProgress.value >= batchTarget.value || photoStore.scanStatus.analyzing === 0) {
+            clearBatch()
+            batchTarget.value = 0
+            batchStartAnalyzed.value = 0
+            batchProgress.value = 0
+          }
+        }
+      })
       startPolling()
     })
     
@@ -265,13 +318,18 @@ export default {
           showToast('正在启动分析...', 'info')
           
           // 记录批次开始状态
-          batchStartAnalyzed.value = photoStore.scanStatus.analyzed
+          const startAnalyzed = photoStore.scanStatus.analyzed
+          batchStartAnalyzed.value = startAnalyzed
           batchProgress.value = 0
           
           const result = await photoStore.batchAnalyze(idsToAnalyze)
           
           // 设置批次目标
-          batchTarget.value = result.queued || idsToAnalyze.length
+          const target = result.queued || idsToAnalyze.length
+          batchTarget.value = target
+          
+          // 保存到 localStorage
+          saveBatch(startAnalyzed, target)
           
           // 处理返回结果
           if (result.analyzing > 0) {
