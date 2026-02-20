@@ -28,30 +28,53 @@
           </div>
         </div>
         
-        <!-- 批次进度（显示当前5000张的进度）-->
-        <div v-if="batchTarget > 0 && (photoStore.scanStatus.analyzing > 0 || batchProgress > 0)" class="batch-progress-section">
+        <!-- 批次进度（显示当前分析状态）-->
+        <div v-if="photoStore.scanStatus.analyzing > 0" class="batch-progress-section">
           <h3>📊 当前批次进度</h3>
-          <div class="batch-stats">
-            <div class="batch-stat">
-              <span class="batch-value">{{ batchProgress }}</span>
-              <span class="batch-label">已完成</span>
+          
+          <!-- 如果知道批次目标（点击分析后）-->
+          <template v-if="batchTarget > 0">
+            <div class="batch-stats">
+              <div class="batch-stat">
+                <span class="batch-value">{{ batchProgress }}</span>
+                <span class="batch-label">已完成</span>
+              </div>
+              <div class="batch-stat">
+                <span class="batch-value">{{ batchTarget }}</span>
+                <span class="batch-label">总数</span>
+              </div>
+              <div class="batch-stat">
+                <span class="batch-value">{{ Math.max(0, batchTarget - batchProgress) }}</span>
+                <span class="batch-label">剩余</span>
+              </div>
             </div>
-            <div class="batch-stat">
-              <span class="batch-value">{{ batchTarget }}</span>
-              <span class="batch-label">总数</span>
+            <div class="progress-bar">
+              <div class="progress-fill" :style="{ width: batchProgressPercent + '%' }"></div>
             </div>
-            <div class="batch-stat">
-              <span class="batch-value">{{ batchTarget - batchProgress }}</span>
-              <span class="batch-label">剩余</span>
+            <p class="progress-text">
+              {{ batchProgressPercent }}% | 
+              {{ batchProgress }} / {{ batchTarget }} 张已完成
+            </p>
+          </template>
+          
+          <!-- 如果不知道批次目标（页面刷新后）-->
+          <template v-else>
+            <div class="batch-stats">
+              <div class="batch-stat">
+                <span class="batch-value">{{ photoStore.scanStatus.analyzing }}</span>
+                <span class="batch-label">正在分析</span>
+              </div>
+              <div class="batch-stat">
+                <span class="batch-value">{{ photoStore.scanStatus.pending }}</span>
+                <span class="batch-label">队列中</span>
+              </div>
             </div>
-          </div>
-          <div class="progress-bar">
-            <div class="progress-fill" :style="{ width: batchProgressPercent + '%' }"></div>
-          </div>
-          <p class="progress-text">
-            {{ batchProgressPercent }}% | 
-            {{ batchProgress }} / {{ batchTarget }} 张已完成
-          </p>
+            <p class="progress-text">
+              正在分析 {{ photoStore.scanStatus.analyzing }} 张照片
+              <br>
+              <small style="color: #9ca3af;">点击"AI 分析照片"可查看详细批次进度</small>
+            </p>
+          </template>
         </div>
         
         <!-- 全局进度条 -->
