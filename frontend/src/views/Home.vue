@@ -28,55 +28,6 @@
           </div>
         </div>
         
-        <!-- 批次进度（显示当前分析状态）-->
-        <div v-if="photoStore.scanStatus.analyzing > 0" class="batch-progress-section">
-          <h3>📊 当前批次进度</h3>
-          
-          <!-- 如果知道批次目标（点击分析后）-->
-          <template v-if="batchTarget > 0">
-            <div class="batch-stats">
-              <div class="batch-stat">
-                <span class="batch-value">{{ batchProgress }}</span>
-                <span class="batch-label">已完成</span>
-              </div>
-              <div class="batch-stat">
-                <span class="batch-value">{{ batchTarget }}</span>
-                <span class="batch-label">总数</span>
-              </div>
-              <div class="batch-stat">
-                <span class="batch-value">{{ Math.max(0, batchTarget - batchProgress) }}</span>
-                <span class="batch-label">剩余</span>
-              </div>
-            </div>
-            <div class="progress-bar">
-              <div class="progress-fill" :style="{ width: batchProgressPercent + '%' }"></div>
-            </div>
-            <p class="progress-text">
-              {{ batchProgressPercent }}% | 
-              {{ batchProgress }} / {{ batchTarget }} 张已完成
-            </p>
-          </template>
-          
-          <!-- 如果不知道批次目标（页面刷新后）-->
-          <template v-else>
-            <div class="batch-stats">
-              <div class="batch-stat">
-                <span class="batch-value">{{ photoStore.scanStatus.analyzing }}</span>
-                <span class="batch-label">正在分析</span>
-              </div>
-              <div class="batch-stat">
-                <span class="batch-value">{{ photoStore.scanStatus.pending }}</span>
-                <span class="batch-label">队列中</span>
-              </div>
-            </div>
-            <p class="progress-text">
-              正在分析 {{ photoStore.scanStatus.analyzing }} 张照片
-              <br>
-              <small style="color: #9ca3af;">点击"AI 分析照片"可查看详细批次进度</small>
-            </p>
-          </template>
-        </div>
-        
         <!-- 全局进度条 -->
         <div v-if="photoStore.scanStatus.analyzing > 0" class="progress-section">
           <div class="progress-bar">
@@ -156,10 +107,6 @@ export default {
     const toast = ref({ show: false, message: '', type: 'success' })
     let pollInterval = null
     
-    // 批次进度（直接从后端获取，无需 localStorage）
-    const batchTarget = computed(() => photoStore.scanStatus.batch_target || 0)
-    const batchProgress = computed(() => photoStore.scanStatus.batch_progress || 0)
-    
     const pending = computed(() => 
       photoStore.scanStatus.total_photos - 
       photoStore.scanStatus.analyzed - 
@@ -171,12 +118,6 @@ export default {
       const analyzed = photoStore.scanStatus.analyzed
       if (total === 0) return 0
       return Math.round((analyzed / total) * 100)
-    })
-    
-    // 批次进度百分比
-    const batchProgressPercent = computed(() => {
-      if (batchTarget.value === 0) return 0
-      return Math.round((batchProgress.value / batchTarget.value) * 100)
     })
     
     const startPolling = () => {
@@ -290,9 +231,6 @@ export default {
       analyzing,
       pending,
       progressPercent,
-      batchTarget,
-      batchProgress,
-      batchProgressPercent,
       toast,
       startScan,
       goToGallery,
@@ -380,48 +318,6 @@ export default {
 @keyframes pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.6; }
-}
-
-.batch-progress-section {
-  margin: 20px 0;
-  padding: 16px;
-  background: linear-gradient(135deg, #f0f4ff 0%, #faf5ff 100%);
-  border-radius: 8px;
-  border: 1px solid #e5e7eb;
-}
-
-.batch-progress-section h3 {
-  font-size: 14px;
-  font-weight: 600;
-  margin-bottom: 12px;
-  color: #4b5563;
-}
-
-.batch-stats {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
-  margin-bottom: 12px;
-}
-
-.batch-stat {
-  text-align: center;
-  padding: 8px;
-  background: white;
-  border-radius: 6px;
-}
-
-.batch-value {
-  display: block;
-  font-size: 24px;
-  font-weight: 700;
-  color: #667eea;
-}
-
-.batch-label {
-  font-size: 11px;
-  color: #9ca3af;
-  margin-top: 2px;
 }
 
 .progress-section {

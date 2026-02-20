@@ -68,34 +68,11 @@ async def batch_analyze(
         if photo.status == "analyzed" and not request.force_reanalyze:
             already_analyzed.append(photo.id)
         elif photo.status == "analyzing":
-            # 跳过正在分析的照片，避免重复添加
             currently_analyzing.append(photo.id)
         else:
             to_analyze.append(photo.id)
-            photo.status = "pending"
     
     db.commit()
-    
-    # 更新批次信息（累加实际加入队列的数量）
-    if len(to_analyze) > 0:
-        from routers.scanner import get_batch_info, set_batch_info
-        
-        current_batch = get_batch_info()
-        current_analyzed = db.query(PhotoModel).filter(PhotoModel.status == "analyzed").count()
-        
-        if current_batch["target"] > 0:
-            # 已有批次，累加本次实际加入的数量
-            new_target = current_batch["target"] + len(to_analyze)
-            set_batch_info(
-                target=new_target,
-                start_analyzed=current_batch["start_analyzed"]
-            )
-        else:
-            # 新批次
-            set_batch_info(
-                target=len(to_analyze),
-                start_analyzed=current_analyzed
-            )
     
     # 启动后台分析任务
     for photo_id in to_analyze:
@@ -127,7 +104,6 @@ async def reanalyze_photo(
     if photo.analysis:
         db.delete(photo.analysis)
     
-    photo.status = "pending"
     db.commit()
     
     # 启动后台任务
@@ -139,5 +115,4 @@ async def reanalyze_photo(
 @router.get("/queue/status")
 async def get_queue_status():
     """获取分析队列状态"""
-    # TODO: 实现任务队列状态监控
     return {"status": "not_implemented"}
