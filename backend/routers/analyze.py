@@ -76,28 +76,25 @@ async def batch_analyze(
     
     db.commit()
     
-    # 更新批次信息
-    # 批次目标 = 当前真实的 pending + analyzing 数量（所有待处理）
+    # 更新批次信息（累加实际加入队列的数量）
     if len(to_analyze) > 0:
         from routers.scanner import get_batch_info, set_batch_info
         
-        current_analyzed = db.query(PhotoModel).filter(PhotoModel.status == "analyzed").count()
-        current_pending = db.query(PhotoModel).filter(PhotoModel.status == "pending").count()
-        current_analyzing = db.query(PhotoModel).filter(PhotoModel.status == "analyzing").count()
-        
         current_batch = get_batch_info()
+        current_analyzed = db.query(PhotoModel).filter(PhotoModel.status == "analyzed").count()
         
-        if current_batch["target"] == 0:
-            # 新批次，记录开始时的 analyzed 数量
+        if current_batch["target"] > 0:
+            # 已有批次，累加本次实际加入的数量
+            new_target = current_batch["target"] + len(to_analyze)
             set_batch_info(
-                target=current_pending + current_analyzing,
-                start_analyzed=current_analyzed
+                target=new_target,
+                start_analyzed=current_batch["start_analyzed"]
             )
         else:
-            # 已有批次，只更新目标（真实的待处理数量）
+            # 新批次
             set_batch_info(
-                target=current_pending + current_analyzing,
-                start_analyzed=current_batch["start_analyzed"]
+                target=len(to_analyze),
+                start_analyzed=current_analyzed
             )
     
     # 启动后台分析任务
