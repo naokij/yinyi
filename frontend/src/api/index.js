@@ -31,7 +31,10 @@ export const scannerApi = {
 
 // 分析相关 API
 export const analyzeApi = {
-  // 批量分析
+  // 分析所有待处理照片
+  analyzeAll: () => api.post('/analyze/all'),
+  
+  // 批量分析（保留用于重试特定照片）
   batchAnalyze: (photoIds, force = false) => 
     api.post('/analyze/batch', { photo_ids: photoIds, force_reanalyze: force }),
   

@@ -116,3 +116,32 @@ async def reanalyze_photo(
 async def get_queue_status():
     """获取分析队列状态"""
     return {"status": "not_implemented"}
+
+
+@router.post("/all", response_model=dict)
+async def analyze_all_pending(
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
+    """分析所有待处理照片"""
+    # 查询所有 pending 状态的照片
+    pending_photos = db.query(PhotoModel).filter(
+        PhotoModel.status == "pending"
+    ).all()
+    
+    if len(pending_photos) == 0:
+        return {
+            "message": "没有待分析的照片",
+            "total": 0,
+            "queued": 0
+        }
+    
+    # 启动后台分析任务
+    for photo in pending_photos:
+        background_tasks.add_task(analyze_photo_task, photo.id)
+    
+    return {
+        "message": "分析任务已启动",
+        "total": len(pending_photos),
+        "queued": len(pending_photos)
+    }

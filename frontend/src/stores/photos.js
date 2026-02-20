@@ -103,6 +103,16 @@ export const usePhotoStore = defineStore('photos', {
         throw error
       }
     },
+    
+    async analyzeAll() {
+      try {
+        const response = await analyzeApi.analyzeAll()
+        return response.data
+      } catch (error) {
+        console.error('分析失败:', error)
+        throw error
+      }
+    },
 
     async reanalyzePhoto(photoId) {
       try {

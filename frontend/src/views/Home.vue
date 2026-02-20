@@ -184,15 +184,7 @@ export default {
         if (confirm(confirmMsg)) {
           showToast('正在启动分析...', 'info')
           
-          // 获取所有待分析照片
-          await photoStore.fetchPhotos({ 
-            status: 'pending', 
-            page: 1, 
-            page_size: 10000
-          })
-          
-          const pendingIds = photoStore.photos.map(p => p.id)
-          const result = await photoStore.batchAnalyze(pendingIds)
+          const result = await photoStore.analyzeAll()
           
           if (result.queued > 0) {
             showToast(`已启动分析 ${result.queued} 张照片`, 'success')
