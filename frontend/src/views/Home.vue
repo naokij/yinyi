@@ -23,9 +23,20 @@
             <span class="stat-label">待处理</span>
           </div>
           <div class="stat-item">
-            <span class="stat-value">{{ photoStore.scanStatus.duplicate_photos }}</span>
-            <span class="stat-label">重复</span>
+            <span class="stat-value analyzing-count">{{ photoStore.scanStatus.analyzing }}</span>
+            <span class="stat-label">分析中</span>
           </div>
+        </div>
+        
+        <!-- 分析进度条 -->
+        <div v-if="photoStore.scanStatus.analyzing > 0" class="progress-section">
+          <div class="progress-bar">
+            <div class="progress-fill" :style="{ width: progressPercent + '%' }"></div>
+          </div>
+          <p class="progress-text">
+            正在分析: {{ photoStore.scanStatus.analyzing }} 张
+            <span v-if="photoStore.scanStatus.pending > 0">| 剩余: {{ photoStore.scanStatus.pending }} 张</span>
+          </p>
         </div>
         
         <div class="actions">
@@ -82,7 +93,7 @@
 </template>
 
 <script>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { usePhotoStore } from '@/stores/photos'
 
@@ -94,6 +105,7 @@ export default {
     const scanning = ref(false)
     const analyzing = ref(false)
     const toast = ref({ show: false, message: '', type: 'success' })
+    let pollInterval = null
     
     const pending = computed(() => 
       photoStore.scanStatus.total_photos - 
@@ -101,9 +113,36 @@ export default {
       photoStore.scanStatus.duplicate_photos
     )
     
+    const progressPercent = computed(() => {
+      const total = photoStore.scanStatus.total_photos
+      const analyzed = photoStore.scanStatus.analyzed
+      if (total === 0) return 0
+      return Math.round((analyzed / total) * 100)
+    })
+    
+    const startPolling = () => {
+      // 如果正在分析，每 5 秒更新一次状态
+      if (pollInterval) clearInterval(pollInterval)
+      pollInterval = setInterval(() => {
+        photoStore.pollScanStatus()
+      }, 5000)
+    }
+    
+    const stopPolling = () => {
+      if (pollInterval) {
+        clearInterval(pollInterval)
+        pollInterval = null
+      }
+    }
+    
     onMounted(() => {
       photoStore.fetchPhotos()
       photoStore.pollScanStatus()
+      startPolling()
+    })
+    
+    onUnmounted(() => {
+      stopPolling()
     })
     
     const showToast = (message, type = 'success') => {
@@ -192,6 +231,7 @@ export default {
       scanning,
       analyzing,
       pending,
+      progressPercent,
       toast,
       startScan,
       goToGallery,
@@ -269,6 +309,46 @@ export default {
   font-size: 12px;
   color: #999;
   margin-top: 4px;
+}
+
+.analyzing-count {
+  color: #f59e0b;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.progress-section {
+  margin: 16px 0;
+}
+
+.progress-bar {
+  height: 8px;
+  background: #e5e7eb;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+  transition: width 0.5s ease;
+  animation: progress-shine 2s infinite;
+}
+
+@keyframes progress-shine {
+  0% { background-position: -100px 0; }
+  100% { background-position: 100px 0; }
+}
+
+.progress-text {
+  text-align: center;
+  font-size: 13px;
+  color: #666;
+  margin-top: 8px;
 }
 
 .actions {
