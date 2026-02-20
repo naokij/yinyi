@@ -28,14 +28,40 @@
           </div>
         </div>
         
-        <!-- 分析进度条 -->
+        <!-- 批次进度（显示当前5000张的进度）-->
+        <div v-if="batchTarget > 0 && (photoStore.scanStatus.analyzing > 0 || batchProgress > 0)" class="batch-progress-section">
+          <h3>📊 当前批次进度</h3>
+          <div class="batch-stats">
+            <div class="batch-stat">
+              <span class="batch-value">{{ batchProgress }}</span>
+              <span class="batch-label">已完成</span>
+            </div>
+            <div class="batch-stat">
+              <span class="batch-value">{{ batchTarget }}</span>
+              <span class="batch-label">总数</span>
+            </div>
+            <div class="batch-stat">
+              <span class="batch-value">{{ batchTarget - batchProgress }}</span>
+              <span class="batch-label">剩余</span>
+            </div>
+          </div>
+          <div class="progress-bar">
+            <div class="progress-fill" :style="{ width: batchProgressPercent + '%' }"></div>
+          </div>
+          <p class="progress-text">
+            {{ batchProgressPercent }}% | 
+            {{ batchProgress }} / {{ batchTarget }} 张已完成
+          </p>
+        </div>
+        
+        <!-- 全局进度条 -->
         <div v-if="photoStore.scanStatus.analyzing > 0" class="progress-section">
           <div class="progress-bar">
             <div class="progress-fill" :style="{ width: progressPercent + '%' }"></div>
           </div>
           <p class="progress-text">
+            全局进度: {{ progressPercent }}% | 
             正在分析: {{ photoStore.scanStatus.analyzing }} 张
-            <span v-if="photoStore.scanStatus.pending > 0">| 剩余: {{ photoStore.scanStatus.pending }} 张</span>
           </p>
         </div>
         
@@ -107,6 +133,11 @@ export default {
     const toast = ref({ show: false, message: '', type: 'success' })
     let pollInterval = null
     
+    // 批次进度追踪
+    const batchStartAnalyzed = ref(0)  // 批次开始时的已分析数量
+    const batchTarget = ref(0)         // 批次目标数量
+    const batchProgress = ref(0)       // 批次已完成数量
+    
     const pending = computed(() => 
       photoStore.scanStatus.total_photos - 
       photoStore.scanStatus.analyzed - 
@@ -120,11 +151,22 @@ export default {
       return Math.round((analyzed / total) * 100)
     })
     
+    // 批次进度百分比
+    const batchProgressPercent = computed(() => {
+      if (batchTarget.value === 0) return 0
+      return Math.round((batchProgress.value / batchTarget.value) * 100)
+    })
+    
     const startPolling = () => {
       // 如果正在分析，每 5 秒更新一次状态
       if (pollInterval) clearInterval(pollInterval)
       pollInterval = setInterval(() => {
-        photoStore.pollScanStatus()
+        photoStore.pollScanStatus().then(() => {
+          // 更新批次进度
+          if (batchTarget.value > 0) {
+            batchProgress.value = photoStore.scanStatus.analyzed - batchStartAnalyzed.value
+          }
+        })
       }, 5000)
     }
     
@@ -199,7 +241,14 @@ export default {
         if (confirm(confirmMsg)) {
           showToast('正在启动分析...', 'info')
           
+          // 记录批次开始状态
+          batchStartAnalyzed.value = photoStore.scanStatus.analyzed
+          batchProgress.value = 0
+          
           const result = await photoStore.batchAnalyze(idsToAnalyze)
+          
+          // 设置批次目标
+          batchTarget.value = result.queued || idsToAnalyze.length
           
           // 处理返回结果
           if (result.analyzing > 0) {
@@ -232,6 +281,10 @@ export default {
       analyzing,
       pending,
       progressPercent,
+      batchStartAnalyzed,
+      batchTarget,
+      batchProgress,
+      batchProgressPercent,
       toast,
       startScan,
       goToGallery,
@@ -319,6 +372,48 @@ export default {
 @keyframes pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.6; }
+}
+
+.batch-progress-section {
+  margin: 20px 0;
+  padding: 16px;
+  background: linear-gradient(135deg, #f0f4ff 0%, #faf5ff 100%);
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+}
+
+.batch-progress-section h3 {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 12px;
+  color: #4b5563;
+}
+
+.batch-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.batch-stat {
+  text-align: center;
+  padding: 8px;
+  background: white;
+  border-radius: 6px;
+}
+
+.batch-value {
+  display: block;
+  font-size: 24px;
+  font-weight: 700;
+  color: #667eea;
+}
+
+.batch-label {
+  font-size: 11px;
+  color: #9ca3af;
+  margin-top: 2px;
 }
 
 .progress-section {

@@ -81,22 +81,17 @@ export const usePhotoStore = defineStore('photos', {
     },
 
     async pollScanStatus() {
-      const poll = async () => {
-        try {
-          const response = await scannerApi.getStatus()
-          this.scanStatus = response.data
-          
-          // 如果还在运行，继续轮询
-          if (response.data.status === 'running') {
-            setTimeout(poll, 2000)
-            // 同时刷新照片列表
-            this.fetchPhotos()
-          }
-        } catch (error) {
-          console.error('获取扫描状态失败:', error)
+      try {
+        const response = await scannerApi.getStatus()
+        this.scanStatus = response.data
+        
+        // 如果还在运行，继续轮询
+        if (response.data.status === 'running') {
+          setTimeout(() => this.pollScanStatus(), 2000)
         }
+      } catch (error) {
+        console.error('获取扫描状态失败:', error)
       }
-      poll()
     },
 
     async batchAnalyze(photoIds, force = false) {
