@@ -104,8 +104,16 @@ async def get_scan_status(db: Session = Depends(get_db)):
     if batch_target > 0 and batch_start > 0:
         batch_progress = max(0, analyzed - batch_start)
         
-        # 批次完成或没有正在分析的照片时，清除批次信息
-        if batch_progress >= batch_target or (analyzing == 0 and new > 0):
+        # 只在批次真正完成时清除（已完成数量 >= 目标数量）
+        # 或者所有分析都完成了（没有正在分析的，也没有待分析的）
+        if batch_progress >= batch_target:
+            # 批次完成
+            clear_batch_info()
+            batch_target = 0
+            batch_start = 0
+            batch_progress = 0
+        elif analyzing == 0 and new == 0:
+            # 所有分析都完成了
             clear_batch_info()
             batch_target = 0
             batch_start = 0
