@@ -76,6 +76,16 @@ async def batch_analyze(
     
     db.commit()
     
+    # 记录批次信息（用于前端显示批次进度）
+    if len(to_analyze) > 0:
+        from routers.scanner import set_batch_info
+        # 获取当前已分析数量
+        current_analyzed = db.query(PhotoModel).filter(PhotoModel.status == "analyzed").count()
+        set_batch_info(
+            target=len(to_analyze),
+            start_analyzed=current_analyzed
+        )
+    
     # 启动后台分析任务
     for photo_id in to_analyze:
         background_tasks.add_task(analyze_photo_task, photo_id)
