@@ -76,15 +76,28 @@ async def batch_analyze(
     
     db.commit()
     
-    # 记录批次信息（用于前端显示批次进度）
+    # 更新批次信息（累加而不是覆盖）
     if len(to_analyze) > 0:
-        from routers.scanner import set_batch_info
-        # 获取当前已分析数量
+        from routers.scanner import get_batch_info, set_batch_info
+        
+        # 获取当前批次信息
+        current_batch = get_batch_info()
         current_analyzed = db.query(PhotoModel).filter(PhotoModel.status == "analyzed").count()
-        set_batch_info(
-            target=len(to_analyze),
-            start_analyzed=current_analyzed
-        )
+        
+        if current_batch["target"] > 0:
+            # 已有批次，累加目标数量
+            new_target = current_batch["target"] + len(to_analyze)
+            # start_analyzed 保持不变（批次开始时的值）
+            set_batch_info(
+                target=new_target,
+                start_analyzed=current_batch["start_analyzed"]
+            )
+        else:
+            # 新批次
+            set_batch_info(
+                target=len(to_analyze),
+                start_analyzed=current_analyzed
+            )
     
     # 启动后台分析任务
     for photo_id in to_analyze:
