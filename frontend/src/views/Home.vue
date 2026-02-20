@@ -57,13 +57,14 @@
       <div class="card quick-actions">
         <h2>⚡ 快速操作</h2>
         <div class="action-list">
-          <div class="action-item" @click="analyzeAll" :class="{ 'disabled': analyzing }">
+          <div class="action-item" @click="analyzeAll" :class="{ 'disabled': isAnalyzing }">
             <span class="icon">🤖</span>
             <div class="action-info">
-              <h3>{{ analyzing ? '分析中...' : 'AI 分析照片' }}</h3>
-              <p>{{ analyzing ? `正在分析，请稍候...` : `待处理: ${photoStore.scanStatus.pending} 张照片` }}</p>
+              <h3>{{ isAnalyzing ? '分析中...' : 'AI 分析照片' }}</h3>
+              <p v-if="isAnalyzing">正在分析 {{ photoStore.scanStatus.analyzing }} 张照片...</p>
+              <p v-else>待处理: {{ photoStore.scanStatus.pending }} 张照片</p>
             </div>
-            <div v-if="analyzing" class="spinner"></div>
+            <div v-if="isAnalyzing" class="spinner"></div>
           </div>
           
           <div class="action-item" @click="goToHighlights">
@@ -120,6 +121,11 @@ export default {
       return Math.round((analyzed / total) * 100)
     })
     
+    // 正在分析：请求中 或 有照片正在分析
+    const isAnalyzing = computed(() => 
+      analyzing.value || photoStore.scanStatus.analyzing > 0
+    )
+    
     const startPolling = () => {
       if (pollInterval) clearInterval(pollInterval)
       pollInterval = setInterval(() => {
@@ -165,7 +171,11 @@ export default {
     }
     
     const analyzeAll = async () => {
-      if (analyzing.value) return
+      // 如果正在分析，禁止重复点击
+      if (isAnalyzing.value) {
+        showToast('分析任务正在进行中，请稍候...', 'warning')
+        return
+      }
       
       analyzing.value = true
       try {
@@ -211,6 +221,7 @@ export default {
       photoStore,
       scanning,
       analyzing,
+      isAnalyzing,
       pending,
       progressPercent,
       toast,
