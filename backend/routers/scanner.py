@@ -6,12 +6,37 @@ from fastapi import APIRouter, Depends, BackgroundTasks
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional
+import threading
 
 from database import get_db
 from scanner import scan_directory_task
 
 
 router = APIRouter()
+
+
+# 分析时间统计（用于估算剩余时间）
+_analyze_stats = {
+    "recent_times": [],  # 最近的分析时间列表（秒）
+    "lock": threading.Lock()
+}
+
+
+def record_analyze_time(duration_seconds: float):
+    """记录分析时间（由 ai_analyzer.py 调用）"""
+    with _analyze_stats["lock"]:
+        _analyze_stats["recent_times"].append(duration_seconds)
+        # 只保留最近 10 次
+        if len(_analyze_stats["recent_times"]) > 10:
+            _analyze_stats["recent_times"] = _analyze_stats["recent_times"][-10:]
+
+
+def get_average_analyze_time():
+    """获取平均分析时间（秒）"""
+    with _analyze_stats["lock"]:
+        if not _analyze_stats["recent_times"]:
+            return None
+        return sum(_analyze_stats["recent_times"]) / len(_analyze_stats["recent_times"])
 
 
 class ScanRequest(BaseModel):
@@ -28,6 +53,9 @@ class ScanStatus(BaseModel):
     duplicate_photos: int
     analyzing: int
     analyzed: int
+    # 预估剩余时间
+    avg_analyze_time: Optional[float] = None  # 平均分析时间（秒）
+    estimated_remaining_seconds: Optional[float] = None  # 预估剩余时间（秒）
 
 
 @router.post("/start", response_model=dict)
@@ -58,6 +86,12 @@ async def get_scan_status(db: Session = Depends(get_db)):
     analyzing = db.query(PhotoModel).filter(PhotoModel.status == "analyzing").count()
     analyzed = db.query(PhotoModel).filter(PhotoModel.status == "analyzed").count()
     
+    # 计算预估剩余时间
+    avg_time = get_average_analyze_time()
+    estimated_remaining = None
+    if avg_time and new > 0:
+        estimated_remaining = avg_time * new
+    
     return ScanStatus(
         status="running" if new > 0 or analyzing > 0 else "idle",
         total_photos=total,
@@ -65,7 +99,9 @@ async def get_scan_status(db: Session = Depends(get_db)):
         pending=new,
         duplicate_photos=duplicate,
         analyzing=analyzing,
-        analyzed=analyzed
+        analyzed=analyzed,
+        avg_analyze_time=round(avg_time, 1) if avg_time else None,
+        estimated_remaining_seconds=round(estimated_remaining, 1) if estimated_remaining else None
     )
 
 

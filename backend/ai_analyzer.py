@@ -325,6 +325,9 @@ def analyze_photo_task(photo_id: int):
         print(f"[AI] 开始分析: {photo.filename}")
         photo.status = "analyzing"
         db.commit()
+        
+        # 记录开始时间
+        start_time = time.time()
 
         if not Path(photo.path).exists():
             print(f"[错误] 文件不存在: {photo.path}")
@@ -427,7 +430,12 @@ def analyze_photo_task(photo_id: int):
             photo.status = "analyzed"
             db.commit()
 
-            print(f"[完成] {photo.filename}")
+            # 记录分析时间（用于估算剩余时间）
+            elapsed = time.time() - start_time
+            from routers.scanner import record_analyze_time
+            record_analyze_time(elapsed)
+
+            print(f"[完成] {photo.filename} ({elapsed:.1f}秒)")
             print(f"  类型: {photo_type}")
             print(f"  回忆分: {memory_score:.1f}/100")
 

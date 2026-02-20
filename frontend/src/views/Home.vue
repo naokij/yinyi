@@ -36,6 +36,7 @@
           <p class="progress-text">
             全局进度: {{ progressPercent }}% | 
             正在分析: {{ photoStore.scanStatus.analyzing }} 张
+            <span v-if="estimatedTime">| 剩余时间: {{ estimatedTime }}</span>
           </p>
         </div>
         
@@ -125,6 +126,23 @@ export default {
     const isAnalyzing = computed(() => 
       analyzing.value || photoStore.scanStatus.analyzing > 0
     )
+    
+    // 预估剩余时间
+    const estimatedTime = computed(() => {
+      const seconds = photoStore.scanStatus.estimated_remaining_seconds
+      if (!seconds || seconds <= 0) return null
+      
+      if (seconds < 60) {
+        return `${Math.round(seconds)}秒`
+      } else if (seconds < 3600) {
+        const mins = Math.round(seconds / 60)
+        return `${mins}分钟`
+      } else {
+        const hours = Math.floor(seconds / 3600)
+        const mins = Math.round((seconds % 3600) / 60)
+        return `${hours}小时${mins}分钟`
+      }
+    })
     
     const startPolling = () => {
       if (pollInterval) clearInterval(pollInterval)
@@ -224,6 +242,7 @@ export default {
       isAnalyzing,
       pending,
       progressPercent,
+      estimatedTime,
       toast,
       startScan,
       goToGallery,

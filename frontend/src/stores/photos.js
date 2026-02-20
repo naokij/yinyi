@@ -18,7 +18,9 @@ export const usePhotoStore = defineStore('photos', {
       pending: 0,
       duplicate_photos: 0,
       analyzing: 0,
-      analyzed: 0
+      analyzed: 0,
+      avg_analyze_time: null,
+      estimated_remaining_seconds: null
     }
   }),
 
