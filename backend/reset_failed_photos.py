@@ -20,8 +20,8 @@ try:
         for photo in failed_photos:
             photo.status = 'pending'
         db.commit()
-        print(f"\n✓ 已重置 {len(failed_photos)} 张照片为待分析状态")
-        print("请在 Web 界面点击"分析照片"按钮开始分析")
+        print("\n✓ 已重置 {} 张照片为待分析状态".format(len(failed_photos)))
+        print("请在 Web 界面点击'分析照片'按钮开始分析")
     else:
         print("\n没有需要重置的照片")
         

@@ -9,6 +9,9 @@ from datetime import datetime
 from typing import Optional, Set
 import piexif
 from PIL import Image
+from pillow_heif import register_heif_opener
+
+register_heif_opener()
 
 from database import SessionLocal, Photo as PhotoModel
 from config import settings
