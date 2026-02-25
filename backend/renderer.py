@@ -13,18 +13,18 @@ from config import settings
 
 
 def get_font(font_size: int, bold: bool = False) -> ImageFont.FreeTypeFont:
-    """获取字体"""
-    # 优先使用霞鹜文楷（如果存在），然后是系统的中文字体
+    """获取字体 - 优先使用项目字体"""
+    # 优先使用项目字体目录中的霞鹜文楷
     font_paths = [
-        # 霞鹜文楷
-        settings.FONTS_DIR + "/LXGWWenKai-Regular.ttf",
-        settings.FONTS_DIR + "/LXGWWenKai-Bold.ttf",
-        # Windows 中文字体
-        "C:/Windows/Fonts/simsun.ttc",    # 宋体
-        "C:/Windows/Fonts/simhei.ttf",     # 黑体
-        "C:/Windows/Fonts/simkai.ttf",     # 楷体
-        "C:/Windows/Fonts/msyh.ttc",       # 微软雅黑
-        "C:/Windows/Fonts/msyhbd.ttc",     # 微软雅黑粗体
+        # 项目字体目录（优先）
+        os.path.join(settings.FONTS_DIR, "LXGWWenKai-Regular.ttf"),
+        os.path.join(settings.FONTS_DIR, "LXGWWenKai-Bold.ttf"),
+        # Windows 中文字体（备用）
+        "C:/Windows/Fonts/simsun.ttc",
+        "C:/Windows/Fonts/simhei.ttf",
+        "C:/Windows/Fonts/simkai.ttf",
+        "C:/Windows/Fonts/msyh.ttc",
+        "C:/Windows/Fonts/msyhbd.ttc",
         # macOS
         "/System/Library/Fonts/PingFang.ttc",
         "/System/Library/Fonts/STHeiti Light.ttc",
@@ -36,14 +36,16 @@ def get_font(font_size: int, bold: bool = False) -> ImageFont.FreeTypeFont:
         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
     ]
     
-    font_name = font_paths[1] if bold and len(font_paths) > 1 else font_paths[0]
+    font_path = font_paths[1] if bold and len(font_paths) > 1 else font_paths[0]
     
-    for font_path in font_paths:
-        if os.path.exists(font_path):
+    for fp in font_paths:
+        if os.path.exists(fp):
             try:
-                return ImageFont.truetype(font_path, font_size)
+                font = ImageFont.truetype(fp, font_size)
+                print(f"[Font] 成功加载字体: {fp}, 大小: {font_size}")
+                return font
             except Exception as e:
-                print(f"[Font] 尝试加载字体失败: {font_path}, {e}")
+                print(f"[Font] 加载字体失败: {fp}, {e}")
                 continue
     
     # 如果都找不到，使用默认字体
