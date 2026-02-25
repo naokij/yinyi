@@ -14,13 +14,26 @@ from config import settings
 
 def get_font(font_size: int, bold: bool = False) -> ImageFont.FreeTypeFont:
     """获取字体"""
-    # 优先使用霞鹜文楷（如果存在）
+    # 优先使用霞鹜文楷（如果存在），然后是系统的中文字体
     font_paths = [
+        # 霞鹜文楷
         settings.FONTS_DIR + "/LXGWWenKai-Regular.ttf",
         settings.FONTS_DIR + "/LXGWWenKai-Bold.ttf",
-        "/System/Library/Fonts/PingFang.ttc",  # macOS
-        "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",  # Linux
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",  # 备用
+        # Windows 中文字体
+        "C:/Windows/Fonts/simsun.ttc",    # 宋体
+        "C:/Windows/Fonts/simhei.ttf",     # 黑体
+        "C:/Windows/Fonts/simkai.ttf",     # 楷体
+        "C:/Windows/Fonts/msyh.ttc",       # 微软雅黑
+        "C:/Windows/Fonts/msyhbd.ttc",     # 微软雅黑粗体
+        # macOS
+        "/System/Library/Fonts/PingFang.ttc",
+        "/System/Library/Fonts/STHeiti Light.ttc",
+        # Linux
+        "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
+        "/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf",
+        "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
+        # 备用英文
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
     ]
     
     font_name = font_paths[1] if bold and len(font_paths) > 1 else font_paths[0]
@@ -29,10 +42,12 @@ def get_font(font_size: int, bold: bool = False) -> ImageFont.FreeTypeFont:
         if os.path.exists(font_path):
             try:
                 return ImageFont.truetype(font_path, font_size)
-            except:
+            except Exception as e:
+                print(f"[Font] 尝试加载字体失败: {font_path}, {e}")
                 continue
     
     # 如果都找不到，使用默认字体
+    print(f"[Font] 使用默认字体，大小: {font_size}")
     return ImageFont.load_default()
 
 
@@ -114,11 +129,11 @@ def render_polaroid(
     draw = ImageDraw.Draw(canvas)
     
     # 绘制文案区域
-    text_y = MARGIN_TOP + PHOTO_HEIGHT + 60
+    text_y = MARGIN_TOP + PHOTO_HEIGHT + 50
     
     # 文案
     if caption:
-        font_caption = get_font(36)
+        font_caption = get_font(48, bold=True)  # 增大字体
         # 文本换行处理
         words = caption
         max_width = CANVAS_WIDTH - (MARGIN_SIDES * 2)
@@ -148,11 +163,11 @@ def render_polaroid(
                 text_width = bbox[2] - bbox[0]
                 x = (CANVAS_WIDTH - text_width) // 2
                 draw.text((x, text_y), line, fill='#333333', font=font_caption)
-                text_y += 50
+                text_y += 60  # 增大行距
         else:
             x = (CANVAS_WIDTH - text_width) // 2
             draw.text((x, text_y), words, fill='#333333', font=font_caption)
-            text_y += 60
+            text_y += 70  # 增大行距
     
     # 日期和地点
     text_y += 30
@@ -164,7 +179,7 @@ def render_polaroid(
     
     if info_parts:
         info_text = " · ".join(info_parts)
-        font_info = get_font(24)
+        font_info = get_font(28)  # 增大字体
         bbox = draw.textbbox((0, 0), info_text, font=font_info)
         text_width = bbox[2] - bbox[0]
         x = (CANVAS_WIDTH - text_width) // 2
