@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     # 目录配置
     PHOTOS_DIR: str = "./photos"
     EXPORTS_DIR: str = "./exports"
-    FONTS_DIR: str = "./fonts"
+    FONTS_DIR: str = str(Path(__file__).parent.parent / "fonts")
     TEMPLATES_DIR: str = "./templates"
     
     # AI 服务配置
