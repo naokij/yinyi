@@ -11,6 +11,14 @@ export const usePhotoStore = defineStore('photos', {
     sortBy: 'taken_at',
     sortOrder: 'desc',
     filterStatus: '',
+    filterYear: null,
+    filterMonth: null,
+    filterMemoryScoreMin: null,
+    filterMemoryScoreMax: null,
+    filterAestheticScoreMin: null,
+    filterAestheticScoreMax: null,
+    filterHasCaption: null,
+    stats: null,
     scanStatus: {
       status: 'idle',
       total_photos: 0,
@@ -44,6 +52,13 @@ export const usePhotoStore = defineStore('photos', {
           sort_by: this.sortBy,
           sort_order: this.sortOrder,
           status: this.filterStatus || undefined,
+          year: this.filterYear || undefined,
+          month: this.filterMonth || undefined,
+          memory_score_min: this.filterMemoryScoreMin || undefined,
+          memory_score_max: this.filterMemoryScoreMax || undefined,
+          aesthetic_score_min: this.filterAestheticScoreMin || undefined,
+          aesthetic_score_max: this.filterAestheticScoreMax || undefined,
+          has_caption: this.filterHasCaption || undefined,
           ...params
         })
         console.log('[Gallery] API 响应:', response.data)
@@ -57,6 +72,59 @@ export const usePhotoStore = defineStore('photos', {
       } finally {
         this.loading = false
       }
+    },
+
+    async fetchStats() {
+      try {
+        const response = await photoApi.getStats()
+        this.stats = response.data
+        console.log('[Gallery] 统计信息:', this.stats)
+      } catch (error) {
+        console.error('[Gallery] 获取统计失败:', error)
+      }
+    },
+
+    setYearFilter(year) {
+      this.filterYear = year
+      this.filterMonth = null
+      this.currentPage = 1
+      this.fetchPhotos()
+    },
+
+    setMonthFilter(month) {
+      this.filterMonth = month
+      this.currentPage = 1
+      this.fetchPhotos()
+    },
+
+    setScoreFilter(type, min, max) {
+      if (type === 'memory') {
+        this.filterMemoryScoreMin = min
+        this.filterMemoryScoreMax = max
+      } else if (type === 'aesthetic') {
+        this.filterAestheticScoreMin = min
+        this.filterAestheticScoreMax = max
+      }
+      this.currentPage = 1
+      this.fetchPhotos()
+    },
+
+    setHasCaptionFilter(hasCaption) {
+      this.filterHasCaption = hasCaption
+      this.currentPage = 1
+      this.fetchPhotos()
+    },
+
+    clearFilters() {
+      this.filterYear = null
+      this.filterMonth = null
+      this.filterMemoryScoreMin = null
+      this.filterMemoryScoreMax = null
+      this.filterAestheticScoreMin = null
+      this.filterAestheticScoreMax = null
+      this.filterHasCaption = null
+      this.currentPage = 1
+      this.fetchPhotos()
     },
 
     setSort(sortBy, sortOrder = 'desc') {

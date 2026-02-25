@@ -4,6 +4,7 @@
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from typing import List, Optional
 from pydantic import BaseModel
 from datetime import datetime
@@ -59,6 +60,13 @@ class PhotoListResponse(BaseModel):
 @router.get("/", response_model=PhotoListResponse)
 async def list_photos(
     status: Optional[str] = None,
+    year: Optional[int] = None,
+    month: Optional[int] = None,
+    memory_score_min: Optional[float] = None,
+    memory_score_max: Optional[float] = None,
+    aesthetic_score_min: Optional[float] = None,
+    aesthetic_score_max: Optional[float] = None,
+    has_caption: Optional[bool] = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100000),
     sort_by: str = Query("taken_at", regex="^(taken_at|scanned_at|memory_score|aesthetic_score)$"),
@@ -66,20 +74,58 @@ async def list_photos(
     db: Session = Depends(get_db)
 ):
     """获取照片列表"""
-    query = db.query(PhotoModel)
+    query = db.query(PhotoModel).outerjoin(AnalysisModel)
     
     if status:
         query = query.filter(PhotoModel.status == status)
+    
+    # 按年份筛选
+    if year:
+        query = query.filter(
+            PhotoModel.taken_at.isnot(None),
+            PhotoModel.taken_at >= datetime(year, 1, 1),
+            PhotoModel.taken_at < datetime(year + 1, 1, 1)
+        )
+    
+    # 按月份筛选（需要配合年份）
+    if month and year:
+        if month == 12:
+            query = query.filter(
+                PhotoModel.taken_at >= datetime(year, month, 1),
+                PhotoModel.taken_at < datetime(year + 1, 1, 1)
+            )
+        else:
+            query = query.filter(
+                PhotoModel.taken_at >= datetime(year, month, 1),
+                PhotoModel.taken_at < datetime(year, month + 1, 1)
+            )
+    
+    # 按回忆分筛选
+    if memory_score_min is not None:
+        query = query.filter(AnalysisModel.memory_score >= memory_score_min)
+    if memory_score_max is not None:
+        query = query.filter(AnalysisModel.memory_score <= memory_score_max)
+    
+    # 按美观分筛选
+    if aesthetic_score_min is not None:
+        query = query.filter(AnalysisModel.aesthetic_score >= aesthetic_score_min)
+    if aesthetic_score_max is not None:
+        query = query.filter(AnalysisModel.aesthetic_score <= aesthetic_score_max)
+    
+    # 筛选有文案的照片
+    if has_caption is True:
+        query = query.filter(AnalysisModel.caption.isnot(None))
+        query = query.filter(AnalysisModel.caption != "")
     
     total = query.count()
     
     # 排序
     if sort_by == "memory_score":
-        query = query.outerjoin(AnalysisModel).order_by(
+        query = query.order_by(
             AnalysisModel.memory_score.desc() if sort_order == "desc" else AnalysisModel.memory_score.asc()
         )
     elif sort_by == "aesthetic_score":
-        query = query.outerjoin(AnalysisModel).order_by(
+        query = query.order_by(
             AnalysisModel.aesthetic_score.desc() if sort_order == "desc" else AnalysisModel.aesthetic_score.asc()
         )
     else:
@@ -96,6 +142,67 @@ async def list_photos(
         "photos": photo_responses,
         "page": page,
         "page_size": page_size
+    }
+
+
+class YearStatsResponse(BaseModel):
+    year: int
+    count: int
+
+
+class PhotoStatsResponse(BaseModel):
+    total: int
+    years: List[YearStatsResponse]
+    analyzed_count: int
+    high_memory_count: int
+    high_aesthetic_count: int
+    with_caption_count: int
+
+
+@router.get("/stats", response_model=PhotoStatsResponse)
+async def get_photo_stats(db: Session = Depends(get_db)):
+    """获取照片统计信息"""
+    # 获取所有有日期的照片，按年份分组
+    year_stats = db.query(
+        func.strftime('%Y', PhotoModel.taken_at).label('year'),
+        func.count(PhotoModel.id).label('count')
+    ).filter(
+        PhotoModel.taken_at.isnot(None)
+    ).group_by(
+        func.strftime('%Y', PhotoModel.taken_at)
+    ).order_by(func.strftime('%Y', PhotoModel.taken_at).desc()).all()
+    
+    years = [YearStatsResponse(year=int(r[0]), count=r[1]) for r in year_stats]
+    
+    # 统计已分析的照片数量
+    analyzed_count = db.query(PhotoModel).filter(PhotoModel.status == 'analyzed').count()
+    
+    # 统计高分回忆分照片 (>= 80)
+    high_memory_count = db.query(PhotoModel).outerjoin(AnalysisModel).filter(
+        AnalysisModel.memory_score >= 80
+    ).count()
+    
+    # 统计高分美观分照片 (>= 80)
+    high_aesthetic_count = db.query(PhotoModel).outerjoin(AnalysisModel).filter(
+        AnalysisModel.aesthetic_score >= 80
+    ).count()
+    
+    # 统计有文案的照片
+    with_caption_count = db.query(PhotoModel).outerjoin(AnalysisModel).filter(
+        AnalysisModel.caption.isnot(None),
+        AnalysisModel.caption != ""
+    ).count()
+    
+    # 总照片数
+    total = db.query(PhotoModel).count()
+    
+    return {
+        "total": total,
+        "years": years,
+        "analyzed_count": analyzed_count,
+        "high_memory_count": high_memory_count,
+        "high_aesthetic_count": high_aesthetic_count,
+        "with_caption_count": with_caption_count
     }
 
 

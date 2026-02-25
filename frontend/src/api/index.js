@@ -13,6 +13,9 @@ export const photoApi = {
   // 获取照片列表
   getPhotos: (params = {}) => api.get('/photos/', { params }),
   
+  // 获取照片统计
+  getStats: () => api.get('/photos/stats'),
+  
   // 获取单张照片
   getPhoto: (id) => api.get(`/photos/${id}`),
   
