@@ -281,37 +281,28 @@ export default {
       }
     })
     
-    // 裁切框样式 - 显示将被裁切使用的区域
+    // 裁切框样式 - 使用百分比计算
     const cropBoxStyle = computed(() => {
-      // 假设目标比例是 3:4 (竖版模板)
+      // 目标比例是 3:4 (竖版模板)
       const targetRatio = 3 / 4
-      const containerWidth = 300  // 容器宽度 px
-      const containerHeight = 400 // 容器高度 px
       
-      // 根据容器比例计算裁切框大小
-      let boxWidth, boxHeight
-      const containerRatio = containerWidth / containerHeight
+      // 裁切框占容器的百分比（保持 3:4 比例）
+      // 宽度占 75%，高度按比例计算
+      const boxWidthPercent = 75
+      const boxHeightPercent = boxWidthPercent / targetRatio
       
-      if (containerRatio > targetRatio) {
-        // 容器比目标宽，裁切框高度受限
-        boxHeight = containerHeight
-        boxWidth = boxHeight * targetRatio
-      } else {
-        // 容器比目标高，裁切框宽度受限
-        boxWidth = containerWidth
-        boxHeight = boxWidth / targetRatio
-      }
-      
-      // 裁切框位置：crop_x=0 表示最左边，crop_x=1 表示最右边
-      // 实际裁切框 left = (containerWidth - boxWidth) * crop_x
-      const left = (containerWidth - boxWidth) * cropX.value
-      const top = (containerHeight - boxHeight) * cropY.value
+      // crop_x=0 表示裁切框在最左边（显示照片左边）
+      // crop_x=0.5 表示裁切框在中间
+      // crop_x=1 表示裁切框在最右边（显示照片右边）
+      // 位置范围：0% 到 (100% - boxWidthPercent)%
+      const leftPercent = (100 - boxWidthPercent) * cropX.value
+      const topPercent = (100 - boxHeightPercent) * cropY.value
       
       return {
-        left: `${left}px`,
-        top: `${top}px`,
-        width: `${boxWidth}px`,
-        height: `${boxHeight}px`
+        left: `${leftPercent}%`,
+        top: `${topPercent}%`,
+        width: `${boxWidthPercent}%`,
+        height: `${boxHeightPercent}%`
       }
     })
     
