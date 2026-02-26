@@ -273,28 +273,26 @@ export default {
       generatePreview()
     }
     
-    // 裁切预览样式 - 使用 object-fit: cover 让图片填充容器，移动显示不同区域
+    // 裁切预览样式 - 显示原始照片
     const cropPreviewStyle = computed(() => {
-      // cropX = 0.5 时，显示中心 → translate(0)
-      // cropX = 0 时，显示左边 → 图片向右移 → translate(-50%)
-      // cropX = 1 时，显示右边 → 图片向左移 → translate(50%)
-      const x = (cropX.value - 0.5) * 100
-      const y = (cropY.value - 0.5) * 100
       return {
-        transform: `translate(${x}%, ${y}%)`
+        width: '100%',
+        height: '100%',
+        objectFit: 'contain'
       }
     })
     
-    // 裁切框样式 - 始终在中间，代表最终输出的裁切区域
+    // 裁切框样式 - 根据 cropX/cropY 移动，显示裁切区域
     const cropBoxStyle = computed(() => {
       // 目标比例是 3:4 (竖版模板)
       const targetRatio = 3 / 4
       const boxWidthPercent = 75
       const boxHeightPercent = boxWidthPercent / targetRatio
       
-      // 裁切框始终居中
-      const leftPercent = (100 - boxWidthPercent) / 2
-      const topPercent = (100 - boxHeightPercent) / 2
+      // cropX=0 表示裁切最左边（照片左边内容）
+      // cropX=1 表示裁切最右边（照片右边内容）
+      const leftPercent = (100 - boxWidthPercent) * cropX.value
+      const topPercent = (100 - boxHeightPercent) * cropY.value
       
       return {
         left: `${leftPercent}%`,
@@ -746,15 +744,17 @@ export default {
   width: 100%;
   height: 400px;
   overflow: hidden;
-  background: #333;
+  background: #1a1a1a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .crop-image {
   position: absolute;
   width: 100%;
   height: 100%;
-  object-fit: cover;
-  transition: transform 0.2s;
+  object-fit: contain;
 }
 
 .crop-overlay {
