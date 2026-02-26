@@ -59,7 +59,10 @@ def render_polaroid(
     taken_at: Optional[datetime] = None,
     location: Optional[str] = None,
     output_dir: str = "./exports",
-    preview: bool = False
+    preview: bool = False,
+    crop_x: float = 0.5,
+    crop_y: float = 0.5,
+    crop_scale: float = 1.0
 ) -> str:
     """
     渲染拍立得风格照片
@@ -100,19 +103,25 @@ def render_polaroid(
         else:
             img = img.convert('RGB')
         
-        # 计算裁剪区域（保持比例，居中裁剪）
+        # 计算裁剪区域（支持手动调整裁切中心）
         img_ratio = img.width / img.height
         target_ratio = PHOTO_WIDTH / PHOTO_HEIGHT
         
         if img_ratio > target_ratio:
             # 图片太宽，裁剪左右
             new_width = int(img.height * target_ratio)
-            left = (img.width - new_width) // 2
+            # 根据 crop_x 计算裁切位置 (0=最左, 0.5=居中, 1=最右)
+            max_left = img.width - new_width
+            left = int(max_left * crop_x)
+            left = max(0, min(left, max_left))  # 限制范围
             img = img.crop((left, 0, left + new_width, img.height))
         else:
             # 图片太高，裁剪上下
             new_height = int(img.width / target_ratio)
-            top = (img.height - new_height) // 2
+            # 根据 crop_y 计算裁切位置 (0=最上, 0.5=居中, 1=最下)
+            max_top = img.height - new_height
+            top = int(max_top * crop_y)
+            top = max(0, min(top, max_top))  # 限制范围
             img = img.crop((0, top, img.width, top + new_height))
         
         # 缩放到目标尺寸

@@ -23,6 +23,10 @@ class ExportRequest(BaseModel):
     caption: Optional[str] = None  # 自定义文案（覆盖 AI 生成）
     include_date: bool = True
     include_location: bool = True
+    # 裁切参数 (0-1 范围，表示裁切框中心位置)
+    crop_x: float = 0.5  # 0=左, 0.5=中, 1=右
+    crop_y: float = 0.5  # 0=上, 0.5=中, 1=下
+    crop_scale: float = 1.0  # 裁切范围，1.0=充满，>1=缩小显示更多内容
 
 
 class BatchExportRequest(BaseModel):
@@ -50,7 +54,10 @@ async def preview_export(request: ExportRequest, db: Session = Depends(get_db)):
             taken_at=photo.taken_at,
             location=photo.location if request.include_location else None,
             output_dir=settings.EXPORTS_DIR,
-            preview=True
+            preview=True,
+            crop_x=request.crop_x,
+            crop_y=request.crop_y,
+            crop_scale=request.crop_scale
         )
         
         return FileResponse(output_path, media_type="image/png")
@@ -79,7 +86,10 @@ async def export_single(
             caption=request.caption or (photo.analysis.caption if photo.analysis else None),
             taken_at=photo.taken_at,
             location=photo.location if request.include_location else None,
-            output_dir=settings.EXPORTS_DIR
+            output_dir=settings.EXPORTS_DIR,
+            crop_x=request.crop_x,
+            crop_y=request.crop_y,
+            crop_scale=request.crop_scale
         )
         
         # 记录导出

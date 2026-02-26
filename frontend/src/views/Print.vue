@@ -16,42 +16,63 @@
         <div class="view-tabs">
           <button 
             class="tab-btn" 
-            :class="{ active: !showPreview }"
-            @click="showPreview = false"
+            :class="{ active: currentTab === 'original' }"
+            @click="currentTab = 'original'"
           >
             原片
           </button>
           <button 
             class="tab-btn" 
-            :class="{ active: showPreview, ready: previewReady }"
-            @click="showPreview = true"
+            :class="{ active: currentTab === 'preview', ready: previewReady }"
+            @click="currentTab = 'preview'"
           >
             预览
             <span v-if="previewReady" class="ready-badge">✓</span>
+          </button>
+          <button 
+            class="tab-btn" 
+            :class="{ active: currentTab === 'crop' }"
+            @click="currentTab = 'crop'"
+          >
+            裁切调整
           </button>
         </div>
         
         <div class="preview-container">
           <!-- 原片显示 -->
           <img 
-            v-if="!showPreview && originalUrl" 
+            v-if="currentTab === 'original' && originalUrl" 
             :src="originalUrl" 
             alt="原片" 
             class="preview-image"
+            :style="cropPreviewStyle"
           >
           <!-- 预览图显示 -->
           <img 
-            v-else-if="showPreview && previewUrl" 
+            v-else-if="currentTab === 'preview' && previewUrl" 
             :src="previewUrl" 
             alt="打印预览" 
             class="preview-image"
           >
+          <!-- 裁切预览 -->
+          <div v-else-if="currentTab === 'crop'" class="crop-preview">
+            <img 
+              v-if="originalUrl" 
+              :src="originalUrl" 
+              alt="裁切预览" 
+              class="crop-image"
+              :style="cropPreviewStyle"
+            >
+            <div class="crop-overlay">
+              <div class="crop-box" :style="cropBoxStyle"></div>
+            </div>
+          </div>
           <!-- 预览生成中 -->
           <div v-else-if="generating" class="preview-placeholder">
             <div class="spinner"></div>
             <p>预览生成中...</p>
           </div>
-          <!-- 预览未生成（异常情况） -->
+          <!-- 预览未生成 -->
           <div v-else class="preview-placeholder">
             <p>点击"生成预览"查看效果</p>
           </div>
@@ -72,7 +93,7 @@
         </div>
       </div>
       
-      <!-- 编辑区域 -->
+        <!-- 编辑区域 -->
       <div class="edit-section">
         <div class="info-card">
           <h3>📷 照片信息</h3>
@@ -83,6 +104,55 @@
           <p v-if="photo.location">
             <strong>地点:</strong> {{ photo.location }}
           </p>
+        </div>
+        
+        <!-- 裁切调整 -->
+        <div class="edit-card crop-card">
+          <h3>✂️ 裁切调整</h3>
+          <p class="hint">调整照片在模板中的显示区域</p>
+          
+          <div class="crop-controls">
+            <div class="crop-control">
+              <label>水平位置: {{ cropXLabel }}</label>
+              <input 
+                type="range" 
+                v-model.number="cropX" 
+                min="0" 
+                max="1" 
+                step="0.05"
+                @change="onCropChange"
+              >
+              <div class="crop-labels">
+                <span>左</span>
+                <span>中</span>
+                <span>右</span>
+              </div>
+            </div>
+            
+            <div class="crop-control">
+              <label>垂直位置: {{ cropYLabel }}</label>
+              <input 
+                type="range" 
+                v-model.number="cropY" 
+                min="0" 
+                max="1" 
+                step="0.05"
+                @change="onCropChange"
+              >
+              <div class="crop-labels">
+                <span>上</span>
+                <span>中</span>
+                <span>下</span>
+              </div>
+            </div>
+          </div>
+          
+          <button 
+            class="btn btn-secondary btn-small"
+            @click="resetCrop"
+          >
+            重置裁切
+          </button>
         </div>
         
         <div class="edit-card">
@@ -152,13 +222,18 @@ export default {
     const loading = ref(true)
     const originalUrl = ref(null)
     const previewUrl = ref(null)
-    const showPreview = ref(false)
+    const currentTab = ref('original')
     const previewReady = ref(false)
     const generating = ref(false)
     const exporting = ref(false)
     const customCaption = ref('')
     const includeDate = ref(true)
     const includeLocation = ref(true)
+    
+    // 裁切参数
+    const cropX = ref(0.5)
+    const cropY = ref(0.5)
+    const cropScale = ref(1.0)
     
     const photoId = parseInt(props.id || route.params.id)
     
@@ -187,6 +262,57 @@ export default {
       }
     })
     
+    // 裁切参数变化时更新预览
+    const onCropChange = () => {
+      generatePreview()
+    }
+    
+    const resetCrop = () => {
+      cropX.value = 0.5
+      cropY.value = 0.5
+      generatePreview()
+    }
+    
+    // 计算裁切预览样式
+    const cropPreviewStyle = computed(() => {
+      const x = (cropX.value - 0.5) * 100
+      const y = (cropY.value - 0.5) * 100
+      return {
+        transform: `translate(${x}%, ${y}%)`,
+        maxWidth: 'none',
+        maxHeight: 'none'
+      }
+    })
+    
+    // 裁切框样式
+    const cropBoxStyle = computed(() => {
+      // 假设目标比例是 3:4 (竖版)
+      const targetRatio = 3 / 4
+      const boxWidth = 75 // %
+      const boxHeight = boxWidth / targetRatio
+      const left = 50 - boxWidth / 2 + (cropX.value - 0.5) * (100 - boxWidth)
+      const top = 50 - boxHeight / 2 + (cropY.value - 0.5) * (100 - boxHeight)
+      
+      return {
+        left: `${left}%`,
+        top: `${top}%`,
+        width: `${boxWidth}%`,
+        height: `${boxHeight}%`
+      }
+    })
+    
+    const cropXLabel = computed(() => {
+      if (cropX.value < 0.33) return '偏左'
+      if (cropX.value > 0.66) return '偏右'
+      return '居中'
+    })
+    
+    const cropYLabel = computed(() => {
+      if (cropY.value < 0.33) return '偏上'
+      if (cropY.value > 0.66) return '偏下'
+      return '居中'
+    })
+    
     const generatePreview = async () => {
       generating.value = true
       previewReady.value = false
@@ -196,7 +322,10 @@ export default {
           template: 'polaroid',
           caption: customCaption.value || null,
           include_date: includeDate.value,
-          include_location: includeLocation.value
+          include_location: includeLocation.value,
+          crop_x: cropX.value,
+          crop_y: cropY.value,
+          crop_scale: cropScale.value
         })
         
         // 创建 blob URL
@@ -204,10 +333,8 @@ export default {
         previewUrl.value = URL.createObjectURL(blob)
         previewReady.value = true
         
-        // 如果用户没有切换到预览，自动切换
-        if (!showPreview.value) {
-          showPreview.value = true
-        }
+        // 切换到预览标签
+        currentTab.value = 'preview'
       } catch (error) {
         console.error('生成预览失败:', error)
       } finally {
@@ -223,7 +350,10 @@ export default {
           template: 'polaroid',
           caption: customCaption.value || null,
           include_date: includeDate.value,
-          include_location: includeLocation.value
+          include_location: includeLocation.value,
+          crop_x: cropX.value,
+          crop_y: cropY.value,
+          crop_scale: cropScale.value
         })
         
         // 下载文件
@@ -252,13 +382,22 @@ export default {
       loading,
       originalUrl,
       previewUrl,
-      showPreview,
+      currentTab,
       previewReady,
       generating,
       exporting,
       customCaption,
       includeDate,
       includeLocation,
+      cropX,
+      cropY,
+      cropScale,
+      cropPreviewStyle,
+      cropBoxStyle,
+      cropXLabel,
+      cropYLabel,
+      onCropChange,
+      resetCrop,
       generatePreview,
       exportPhoto,
       formatDate
@@ -531,5 +670,103 @@ export default {
   text-align: center;
   padding: 60px 20px;
   color: #999;
+}
+
+/* 裁切相关样式 */
+.crop-card {
+  background: white;
+  padding: 20px;
+  border-radius: 12px;
+}
+
+.crop-card h3 {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: #333;
+}
+
+.crop-card .hint {
+  font-size: 12px;
+  color: #999;
+  margin-bottom: 16px;
+}
+
+.crop-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.crop-control label {
+  display: block;
+  font-size: 13px;
+  color: #555;
+  margin-bottom: 8px;
+}
+
+.crop-control input[type="range"] {
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  background: #e0e0e0;
+  outline: none;
+  -webkit-appearance: none;
+}
+
+.crop-control input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #667eea;
+  cursor: pointer;
+}
+
+.crop-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #999;
+  margin-top: 4px;
+}
+
+.btn-small {
+  padding: 8px 16px;
+  font-size: 13px;
+}
+
+/* 裁切预览 */
+.crop-preview {
+  position: relative;
+  width: 100%;
+  height: 400px;
+  overflow: hidden;
+  background: #333;
+}
+
+.crop-image {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  transition: transform 0.2s;
+}
+
+.crop-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.crop-box {
+  position: absolute;
+  border: 2px dashed #667eea;
+  background: rgba(102, 126, 234, 0.1);
+  box-sizing: border-box;
 }
 </style>
