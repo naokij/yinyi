@@ -273,13 +273,13 @@ export default {
       generatePreview()
     }
     
-    // 裁切预览样式 - 让图片随裁切框移动，显示实际会被使用的区域
+    // 裁切预览样式 - 使用 object-fit: cover 让图片填充容器，移动显示不同区域
     const cropPreviewStyle = computed(() => {
-      // cropX=0.5 时，图片居中
-      // cropX=0 时，图片显示左边部分（即裁切框在左边）
-      // cropX=1 时，图片显示右边部分（即裁切框在右边）
-      const x = (cropX.value - 0.5) * 50  // -25% 到 +25%
-      const y = (cropY.value - 0.5) * 50
+      // cropX = 0.5 时，显示中心 → translate(0)
+      // cropX = 0 时，显示左边 → 图片向右移 → translate(-50%)
+      // cropX = 1 时，显示右边 → 图片向左移 → translate(50%)
+      const x = (cropX.value - 0.5) * 100
+      const y = (cropY.value - 0.5) * 100
       return {
         transform: `translate(${x}%, ${y}%)`
       }
@@ -753,7 +753,7 @@ export default {
   position: absolute;
   width: 100%;
   height: 100%;
-  object-fit: contain;
+  object-fit: cover;
   transition: transform 0.2s;
 }
 
