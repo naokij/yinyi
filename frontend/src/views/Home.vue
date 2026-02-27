@@ -9,6 +9,12 @@
       <!-- 扫描状态卡片 -->
       <div class="card status-card">
         <h2>📸 照片库状态</h2>
+        
+        <!-- 扫描器状态 -->
+        <div v-if="isScannerRunning" class="scanner-status running">
+          🔄 扫描进行中...
+        </div>
+        
         <div class="stats">
           <div class="stat-item">
             <span class="stat-value">{{ photoStore.scanStatus.total_photos }}</span>
@@ -44,9 +50,9 @@
           <button 
             class="btn btn-primary"
             @click="startScan"
-            :disabled="scanning"
+            :disabled="scanning || isScannerRunning"
           >
-            {{ scanning ? '扫描中...' : '开始扫描' }}
+            {{ scanning ? '扫描中...' : isScannerRunning ? '扫描进行中' : '开始扫描' }}
           </button>
           <button class="btn btn-secondary" @click="goToGallery">
             浏览照片
@@ -125,6 +131,11 @@ export default {
     // 正在分析：请求中 或 有照片正在分析
     const isAnalyzing = computed(() => 
       analyzing.value || photoStore.scanStatus.analyzing > 0
+    )
+    
+    // 扫描器是否正在运行
+    const isScannerRunning = computed(() => 
+      photoStore.scanStatus.status === 'running'
     )
     
     // 预估剩余时间
@@ -240,6 +251,7 @@ export default {
       scanning,
       analyzing,
       isAnalyzing,
+      isScannerRunning,
       pending,
       progressPercent,
       estimatedTime,
@@ -296,6 +308,25 @@ export default {
   font-weight: 600;
   margin-bottom: 16px;
   color: #333;
+}
+
+.scanner-status {
+  padding: 8px 12px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.scanner-status.running {
+  background: #e8f5e9;
+  color: #2e7d32;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
 }
 
 .stats {
