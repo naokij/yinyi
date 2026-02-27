@@ -104,6 +104,28 @@
           <p v-if="photo.location">
             <strong>地点:</strong> {{ photo.location }}
           </p>
+          <p><strong>方向:</strong> {{ photoOrientation }}</p>
+        </div>
+        
+        <!-- 模板选择 -->
+        <div class="edit-card">
+          <h3>🎨 模板选择</h3>
+          <div class="template-selector">
+            <button 
+              class="template-btn"
+              :class="{ active: template === 'polaroid' }"
+              @click="setTemplate('polaroid')"
+            >
+              拍立得
+            </button>
+            <button 
+              class="template-btn"
+              :class="{ active: template === 'classic' }"
+              @click="setTemplate('classic')"
+            >
+              经典
+            </button>
+          </div>
         </div>
         
         <!-- 裁切调整 -->
@@ -229,6 +251,7 @@ export default {
     const customCaption = ref('')
     const includeDate = ref(true)
     const includeLocation = ref(true)
+    const template = ref('polaroid')
     
     // 裁切参数
     const cropX = ref(0.5)
@@ -314,13 +337,28 @@ export default {
       return '居中'
     })
     
+    const photoOrientation = computed(() => {
+      if (!photo.value) return '未知'
+      // 通过 width 和 height 判断方向
+      const w = photo.value.width || 0
+      const h = photo.value.height || 0
+      if (w > h) return '横版'
+      if (h > w) return '竖版'
+      return '未知'
+    })
+    
+    const setTemplate = (t) => {
+      template.value = t
+      generatePreview()
+    }
+    
     const generatePreview = async () => {
       generating.value = true
       previewReady.value = false
       try {
         const response = await exportApi.preview({
           photo_id: photoId,
-          template: 'polaroid',
+          template: template.value,
           caption: customCaption.value || null,
           include_date: includeDate.value,
           include_location: includeLocation.value,
@@ -348,7 +386,7 @@ export default {
       try {
         const response = await exportApi.exportSingle({
           photo_id: photoId,
-          template: 'polaroid',
+          template: template.value,
           caption: customCaption.value || null,
           include_date: includeDate.value,
           include_location: includeLocation.value,
@@ -390,6 +428,8 @@ export default {
       customCaption,
       includeDate,
       includeLocation,
+      template,
+      photoOrientation,
       cropX,
       cropY,
       cropScale,
@@ -399,6 +439,7 @@ export default {
       cropYLabel,
       onCropChange,
       resetCrop,
+      setTemplate,
       generatePreview,
       exportPhoto,
       formatDate
@@ -580,6 +621,32 @@ export default {
   font-size: 13px;
   color: #666;
   margin-bottom: 8px;
+}
+
+.template-selector {
+  display: flex;
+  gap: 12px;
+}
+
+.template-btn {
+  flex: 1;
+  padding: 12px 16px;
+  border: 2px solid #eee;
+  background: white;
+  border-radius: 8px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.template-btn:hover {
+  border-color: #667eea;
+}
+
+.template-btn.active {
+  border-color: #667eea;
+  background: #667eea;
+  color: white;
 }
 
 .form-group {

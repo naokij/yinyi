@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from pathlib import Path
 
 from database import get_db, Photo as PhotoModel, Export as ExportModel
-from renderer import render_polaroid
+from renderer import render_polaroid, render_classic
 from config import settings
 
 
@@ -47,18 +47,32 @@ async def preview_export(request: ExportRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="照片尚未完成 AI 分析")
     
     try:
-        # 生成预览图
-        output_path = render_polaroid(
-            photo_path=photo.path,
-            caption=request.caption or (photo.analysis.caption if photo.analysis else None),
-            taken_at=photo.taken_at,
-            location=photo.location if request.include_location else None,
-            output_dir=settings.EXPORTS_DIR,
-            preview=True,
-            crop_x=request.crop_x,
-            crop_y=request.crop_y,
-            crop_scale=request.crop_scale
-        )
+        # 根据模板类型选择渲染函数
+        if request.template == "classic":
+            output_path = render_classic(
+                photo_path=photo.path,
+                caption=request.caption or (photo.analysis.caption if photo.analysis else None),
+                taken_at=photo.taken_at,
+                location=photo.location if request.include_location else None,
+                output_dir=settings.EXPORTS_DIR,
+                preview=True,
+                crop_x=request.crop_x,
+                crop_y=request.crop_y,
+                crop_scale=request.crop_scale
+            )
+        else:
+            # 默认使用 polaroid
+            output_path = render_polaroid(
+                photo_path=photo.path,
+                caption=request.caption or (photo.analysis.caption if photo.analysis else None),
+                taken_at=photo.taken_at,
+                location=photo.location if request.include_location else None,
+                output_dir=settings.EXPORTS_DIR,
+                preview=True,
+                crop_x=request.crop_x,
+                crop_y=request.crop_y,
+                crop_scale=request.crop_scale
+            )
         
         return FileResponse(output_path, media_type="image/png")
     
@@ -81,16 +95,29 @@ async def export_single(
         raise HTTPException(status_code=400, detail="照片尚未完成 AI 分析")
     
     try:
-        output_path = render_polaroid(
-            photo_path=photo.path,
-            caption=request.caption or (photo.analysis.caption if photo.analysis else None),
-            taken_at=photo.taken_at,
-            location=photo.location if request.include_location else None,
-            output_dir=settings.EXPORTS_DIR,
-            crop_x=request.crop_x,
-            crop_y=request.crop_y,
-            crop_scale=request.crop_scale
-        )
+        # 根据模板类型选择渲染函数
+        if request.template == "classic":
+            output_path = render_classic(
+                photo_path=photo.path,
+                caption=request.caption or (photo.analysis.caption if photo.analysis else None),
+                taken_at=photo.taken_at,
+                location=photo.location if request.include_location else None,
+                output_dir=settings.EXPORTS_DIR,
+                crop_x=request.crop_x,
+                crop_y=request.crop_y,
+                crop_scale=request.crop_scale
+            )
+        else:
+            output_path = render_polaroid(
+                photo_path=photo.path,
+                caption=request.caption or (photo.analysis.caption if photo.analysis else None),
+                taken_at=photo.taken_at,
+                location=photo.location if request.include_location else None,
+                output_dir=settings.EXPORTS_DIR,
+                crop_x=request.crop_x,
+                crop_y=request.crop_y,
+                crop_scale=request.crop_scale
+            )
         
         # 记录导出
         export_record = ExportModel(

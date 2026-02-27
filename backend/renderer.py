@@ -67,26 +67,42 @@ def render_polaroid(
     """
     渲染拍立得风格照片
     
-    布局：
-    - 画布：1181×1748 px (100×148mm @ 300 DPI)
-    - 上白边：40 px
-    - 照片区域：1000×1333 px (居中，保持 3:4 比例)
-    - 下白边：375 px（用于文案和日期）
-    - 左右白边：90.5 px
+    自动检测照片方向：
+    - 竖版 (portrait): 白边在左右，照片 3:4
+    - 横版 (landscape): 白边在上下，照片 4:3
     """
     
-    # 画布尺寸
-    CANVAS_WIDTH = 1181
-    CANVAS_HEIGHT = 1748
+    # 加载原图检测方向
+    with Image.open(photo_path) as img_orig:
+        if img_orig.mode in ('RGBA', 'LA', 'P'):
+            img_orig = img_orig.convert('RGBA')
+        orig_width, orig_height = img_orig.size
+        is_landscape = orig_width > orig_height
     
-    # 边距
-    MARGIN_TOP = 40
-    MARGIN_BOTTOM = 375
-    MARGIN_SIDES = 90
-    
-    # 照片区域
-    PHOTO_WIDTH = CANVAS_WIDTH - (MARGIN_SIDES * 2)
-    PHOTO_HEIGHT = CANVAS_HEIGHT - MARGIN_TOP - MARGIN_BOTTOM
+    if is_landscape:
+        # 横版拍立得：白边在上下
+        CANVAS_WIDTH = 1181
+        CANVAS_HEIGHT = 1748
+        
+        MARGIN_TOP = 200      # 上白边（文案区域）
+        MARGIN_BOTTOM = 200   # 下白边
+        MARGIN_SIDES = 40     # 左右白边（较小）
+        
+        PHOTO_WIDTH = CANVAS_WIDTH - (MARGIN_SIDES * 2)
+        PHOTO_HEIGHT = CANVAS_HEIGHT - MARGIN_TOP - MARGIN_BOTTOM
+        target_ratio = PHOTO_WIDTH / PHOTO_HEIGHT  # 4:3
+    else:
+        # 竖版拍立得：白边在左右（原有逻辑）
+        CANVAS_WIDTH = 1181
+        CANVAS_HEIGHT = 1748
+        
+        MARGIN_TOP = 40
+        MARGIN_BOTTOM = 375   # 下白边（文案区域）
+        MARGIN_SIDES = 90
+        
+        PHOTO_WIDTH = CANVAS_WIDTH - (MARGIN_SIDES * 2)
+        PHOTO_HEIGHT = CANVAS_HEIGHT - MARGIN_TOP - MARGIN_BOTTOM
+        target_ratio = PHOTO_WIDTH / PHOTO_HEIGHT  # 3:4
     
     # 创建白色画布
     canvas = Image.new('RGB', (CANVAS_WIDTH, CANVAS_HEIGHT), color='white')
@@ -105,23 +121,20 @@ def render_polaroid(
         
         # 计算裁剪区域（支持手动调整裁切中心）
         img_ratio = img.width / img.height
-        target_ratio = PHOTO_WIDTH / PHOTO_HEIGHT
         
         if img_ratio > target_ratio:
             # 图片太宽，裁剪左右
             new_width = int(img.height * target_ratio)
-            # 根据 crop_x 计算裁切位置 (0=最左, 0.5=居中, 1=最右)
             max_left = img.width - new_width
             left = int(max_left * crop_x)
-            left = max(0, min(left, max_left))  # 限制范围
+            left = max(0, min(left, max_left))
             img = img.crop((left, 0, left + new_width, img.height))
         else:
             # 图片太高，裁剪上下
             new_height = int(img.width / target_ratio)
-            # 根据 crop_y 计算裁切位置 (0=最上, 0.5=居中, 1=最下)
             max_top = img.height - new_height
             top = int(max_top * crop_y)
-            top = max(0, min(top, max_top))  # 限制范围
+            top = max(0, min(top, max_top))
             img = img.crop((0, top, img.width, top + new_height))
         
         # 缩放到目标尺寸
@@ -132,6 +145,81 @@ def render_polaroid(
         img = enhancer.enhance(1.1)
         enhancer = ImageEnhance.Color(img)
         img = enhancer.enhance(1.05)
+    
+    # 粘贴照片
+    if is_landscape:
+        canvas.paste(img, (MARGIN_SIDES, MARGIN_TOP))
+    else:
+        canvas.paste(img, (MARGIN_SIDES, MARGIN_TOP))
+    
+    # 绘制
+    draw = ImageDraw.Draw(canvas)
+    
+    # 绘制文案区域
+    if is_landscape:
+        text_y = MARGIN_TOP + 40  # 横版在顶部白边
+    else:
+        text_y = MARGIN_TOP + PHOTO_HEIGHT + 60  # 竖版在下部白边
+    
+    # 文案
+    if caption:
+        font_caption = get_font(48, bold=True)
+        words = caption
+        max_width = CANVAS_WIDTH - (MARGIN_SIDES * 2)
+        
+        bbox = draw.textbbox((0, 0), words, font=font_caption)
+        text_width = bbox[2] - bbox[0]
+        
+        if text_width > max_width:
+            lines = []
+            current_line = ""
+            for char in words:
+                test_line = current_line + char
+                bbox = draw.textbbox((0, 0), test_line, font=font_caption)
+                if bbox[2] - bbox[0] > max_width and current_line:
+                    lines.append(current_line)
+                    current_line = char
+                else:
+                    current_line = test_line
+            if current_line:
+                lines.append(current_line)
+            
+            for line in lines[:2]:
+                bbox = draw.textbbox((0, 0), line, font=font_caption)
+                text_width = bbox[2] - bbox[0]
+                x = (CANVAS_WIDTH - text_width) // 2
+                draw.text((x, text_y), line, fill='#333333', font=font_caption)
+                text_y += 60
+        else:
+            x = (CANVAS_WIDTH - text_width) // 2
+            draw.text((x, text_y), words, fill='#333333', font=font_caption)
+            text_y += 70
+    
+    # 日期和地点
+    text_y += 30
+    info_parts = []
+    if taken_at:
+        info_parts.append(taken_at.strftime("%Y.%m.%d"))
+    if location:
+        info_parts.append(location)
+    
+    if info_parts:
+        info_text = " · ".join(info_parts)
+        font_info = get_font(28)
+        bbox = draw.textbbox((0, 0), info_text, font=font_info)
+        text_width = bbox[2] - bbox[0]
+        x = (CANVAS_WIDTH - text_width) // 2
+        draw.text((x, text_y), info_text, fill='#888888', font=font_info)
+    
+    # 保存
+    os.makedirs(output_dir, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"polaroid_{timestamp}.png"
+    output_path = os.path.join(output_dir, filename)
+    
+    canvas.save(output_path, "PNG", quality=95)
+    
+    return output_path
     
     # 粘贴照片
     canvas.paste(img, (MARGIN_SIDES, MARGIN_TOP))
@@ -212,11 +300,155 @@ def render_classic(
     caption: Optional[str] = None,
     taken_at: Optional[datetime] = None,
     location: Optional[str] = None,
-    output_dir: str = "./exports"
+    output_dir: str = "./exports",
+    preview: bool = False,
+    crop_x: float = 0.5,
+    crop_y: float = 0.5,
+    crop_scale: float = 1.0
 ) -> str:
     """
-    经典单张模板（填满画面，文字在底部黑色渐变层上）
-    预留功能，Phase 2 实现
+    经典模板：填满画面，文字在底部黑色半透明渐变层上
+    
+    自动检测照片方向：
+    - 竖版：照片填满画面，文字在底部
+    - 横版：照片填满画面，文字在底部
     """
-    # TODO: 实现经典风格模板
-    pass
+    
+    # 画布尺寸（竖版）
+    CANVAS_WIDTH = 1181
+    CANVAS_HEIGHT = 1748
+    
+    # 加载原图检测方向
+    with Image.open(photo_path) as img_orig:
+        if img_orig.mode in ('RGBA', 'LA', 'P'):
+            img_orig = img_orig.convert('RGBA')
+        orig_width, orig_height = img_orig.size
+        is_landscape = orig_width > orig_height
+    
+    if is_landscape:
+        # 横版：交换宽高
+        CANVAS_WIDTH, CANVAS_HEIGHT = CANVAS_HEIGHT, CANVAS_WIDTH
+    
+    # 创建白色画布
+    canvas = Image.new('RGB', (CANVAS_WIDTH, CANVAS_HEIGHT), color='white')
+    
+    # 加载并处理原图
+    with Image.open(photo_path) as img:
+        # 转换为 RGB（处理透明通道）
+        if img.mode in ('RGBA', 'LA', 'P'):
+            background = Image.new('RGB', img.size, 'white')
+            if img.mode == 'P':
+                img = img.convert('RGBA')
+            background.paste(img, mask=img.split()[-1] if img.mode in ('RGBA', 'LA') else None)
+            img = background
+        else:
+            img = img.convert('RGB')
+        
+        # 填满整个画布（保持比例，可能裁切）
+        img_ratio = img.width / img.height
+        target_ratio = CANVAS_WIDTH / CANVAS_HEIGHT
+        
+        if img_ratio > target_ratio:
+            # 图片太宽，裁剪左右
+            new_width = int(img.height * target_ratio)
+            max_left = img.width - new_width
+            left = int(max_left * crop_x)
+            left = max(0, min(left, max_left))
+            img = img.crop((left, 0, left + new_width, img.height))
+        else:
+            # 图片太高，裁剪上下
+            new_height = int(img.width / target_ratio)
+            max_top = img.height - new_height
+            top = int(max_top * crop_y)
+            top = max(0, min(top, max_top))
+            img = img.crop((0, top, img.width, top + new_height))
+        
+        # 缩放到画布尺寸（填满）
+        img = img.resize((CANVAS_WIDTH, CANVAS_HEIGHT), Image.Resampling.LANCZOS)
+        
+        # 轻微增强
+        enhancer = ImageEnhance.Contrast(img)
+        img = enhancer.enhance(1.05)
+    
+    # 粘贴照片
+    canvas.paste(img, (0, 0))
+    
+    # 绘制底部渐变层
+    draw = ImageDraw.Draw(canvas)
+    
+    # 底部渐变区域高度
+    gradient_height = 350 if not is_landscape else 300
+    
+    # 创建渐变层（从透明到黑色）
+    gradient = Image.new('RGBA', (CANVAS_WIDTH, gradient_height), color=(0, 0, 0, 0))
+    gradient_draw = ImageDraw.Draw(gradient)
+    
+    for y in range(gradient_height):
+        alpha = int(200 * (y / gradient_height))  # 0-200 渐变
+        gradient_draw.line([(0, y), (CANVAS_WIDTH, y)], fill=(0, 0, 0, alpha))
+    
+    # 粘贴渐变层到底部
+    canvas.paste(gradient, (0, CANVAS_HEIGHT - gradient_height), mask=gradient)
+    
+    # 绘制文案（在渐变层上，白色文字）
+    text_y = CANVAS_HEIGHT - gradient_height + 30
+    
+    # 文案
+    if caption:
+        font_caption = get_font(42, bold=True)
+        words = caption
+        max_width = CANVAS_WIDTH - 80
+        
+        bbox = draw.textbbox((0, 0), words, font=font_caption)
+        text_width = bbox[2] - bbox[0]
+        
+        if text_width > max_width:
+            lines = []
+            current_line = ""
+            for char in words:
+                test_line = current_line + char
+                bbox = draw.textbbox((0, 0), test_line, font=font_caption)
+                if bbox[2] - bbox[0] > max_width and current_line:
+                    lines.append(current_line)
+                    current_line = char
+                else:
+                    current_line = test_line
+            if current_line:
+                lines.append(current_line)
+            
+            for line in lines[:2]:
+                bbox = draw.textbbox((0, 0), line, font=font_caption)
+                text_width = bbox[2] - bbox[0]
+                x = (CANVAS_WIDTH - text_width) // 2
+                draw.text((x, text_y), line, fill='#FFFFFF', font=font_caption)
+                text_y += 55
+        else:
+            x = (CANVAS_WIDTH - text_width) // 2
+            draw.text((x, text_y), words, fill='#FFFFFF', font=font_caption)
+            text_y += 65
+    
+    # 日期和地点
+    text_y += 25
+    info_parts = []
+    if taken_at:
+        info_parts.append(taken_at.strftime("%Y.%m.%d"))
+    if location:
+        info_parts.append(location)
+    
+    if info_parts:
+        info_text = " · ".join(info_parts)
+        font_info = get_font(24)
+        bbox = draw.textbbox((0, 0), info_text, font=font_info)
+        text_width = bbox[2] - bbox[0]
+        x = (CANVAS_WIDTH - text_width) // 2
+        draw.text((x, text_y), info_text, fill='#CCCCCC', font=font_info)
+    
+    # 保存
+    os.makedirs(output_dir, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"classic_{timestamp}.png"
+    output_path = os.path.join(output_dir, filename)
+    
+    canvas.save(output_path, "PNG", quality=95)
+    
+    return output_path
