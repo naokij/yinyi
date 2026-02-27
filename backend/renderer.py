@@ -390,8 +390,38 @@ def render_classic(
     # 粘贴渐变层到底部
     canvas.paste(gradient, (0, CANVAS_HEIGHT - gradient_height), mask=gradient)
     
-    # 绘制文案（在渐变层上，白色文字）
-    text_y = CANVAS_HEIGHT - gradient_height + 30
+    # 绘制文案（在渐变层底部，白色文字）
+    # 先计算文案需要的行数
+    caption_lines = 1
+    if caption:
+        font_caption = get_font(42, bold=True)
+        words = caption
+        max_width = CANVAS_WIDTH - 80
+        bbox = draw.textbbox((0, 0), words, font=font_caption)
+        text_width = bbox[2] - bbox[0]
+        
+        if text_width > max_width:
+            lines = []
+            current_line = ""
+            for char in words:
+                test_line = current_line + char
+                bbox = draw.textbbox((0, 0), test_line, font=font_caption)
+                if bbox[2] - bbox[0] > max_width and current_line:
+                    lines.append(current_line)
+                    current_line = char
+                else:
+                    current_line = test_line
+            if current_line:
+                lines.append(current_line)
+            caption_lines = min(len(lines), 2)
+    
+    # 文字从渐变区域底部向上计算位置
+    # 预留底部边距
+    bottom_margin = 40
+    line_height = 55
+    
+    # 计算起始Y坐标（从底部往上）
+    text_y = CANVAS_HEIGHT - bottom_margin - (caption_lines * line_height)
     
     # 文案
     if caption:
@@ -427,21 +457,24 @@ def render_classic(
             draw.text((x, text_y), words, fill='#FFFFFF', font=font_caption)
             text_y += 65
     
-    # 日期和地点
-    text_y += 25
-    info_parts = []
-    if taken_at:
-        info_parts.append(taken_at.strftime("%Y.%m.%d"))
-    if location:
-        info_parts.append(location)
+    # 日期和地点 - 固定在底部
+    bottom_margin = 40
     
-    if info_parts:
+    # 日期位置
+    if taken_at or location:
+        info_parts = []
+        if taken_at:
+            info_parts.append(taken_at.strftime("%Y.%m.%d"))
+        if location:
+            info_parts.append(location)
+        
         info_text = " · ".join(info_parts)
         font_info = get_font(24)
         bbox = draw.textbbox((0, 0), info_text, font=font_info)
         text_width = bbox[2] - bbox[0]
         x = (CANVAS_WIDTH - text_width) // 2
-        draw.text((x, text_y), info_text, fill='#CCCCCC', font=font_info)
+        date_y = CANVAS_HEIGHT - bottom_margin
+        draw.text((x, date_y), info_text, fill='#CCCCCC', font=font_info)
     
     # 保存
     os.makedirs(output_dir, exist_ok=True)
