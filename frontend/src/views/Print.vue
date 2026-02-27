@@ -349,10 +349,12 @@ export default {
     
     const setTemplate = (t) => {
       template.value = t
+      console.log('Template changed to:', t)
       generatePreview()
     }
     
     const generatePreview = async () => {
+      console.log('Generating preview with template:', template.value)
       generating.value = true
       previewReady.value = false
       try {
@@ -366,6 +368,11 @@ export default {
           crop_y: cropY.value,
           crop_scale: cropScale.value
         })
+        
+        // 释放旧的 blob URL
+        if (previewUrl.value) {
+          URL.revokeObjectURL(previewUrl.value)
+        }
         
         // 创建 blob URL
         const blob = new Blob([response.data], { type: 'image/png' })
