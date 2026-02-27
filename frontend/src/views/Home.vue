@@ -34,7 +34,21 @@
           </div>
         </div>
         
-        <!-- 全局进度条 -->
+        <!-- 扫描进度 -->
+        <div v-if="isScannerRunning" class="progress-section scanner-progress">
+          <div class="scanner-info">
+            <span class="scanner-icon">🔄</span>
+            <span>正在扫描...</span>
+          </div>
+          <p class="progress-text" v-if="photoStore.scanStatus.new_photos > 0">
+            发现 {{ photoStore.scanStatus.new_photos }} 张新照片，等待分析
+          </p>
+          <p class="progress-text" v-else>
+            扫描进行中...
+          </p>
+        </div>
+        
+        <!-- 分析进度条 -->
         <div v-if="photoStore.scanStatus.analyzing > 0" class="progress-section">
           <div class="progress-bar">
             <div class="progress-fill" :style="{ width: progressPercent + '%' }"></div>
@@ -322,6 +336,30 @@ export default {
   background: #e8f5e9;
   color: #2e7d32;
   animation: pulse 2s infinite;
+}
+
+.scanner-progress {
+  background: #fff3e0;
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.scanner-progress .scanner-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+  color: #e65100;
+  margin-bottom: 4px;
+}
+
+.scanner-icon {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 @keyframes pulse {
