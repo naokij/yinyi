@@ -80,13 +80,13 @@ def render_polaroid(
         is_landscape = orig_width > orig_height
     
     if is_landscape:
-        # 横版拍立得：白边在上下
-        CANVAS_WIDTH = 1181
-        CANVAS_HEIGHT = 1748
+        # 横版拍立得：白边在上下，画布横向，照片偏上，文字在下方紧凑排列
+        CANVAS_WIDTH = 1748   # 宽度 > 高度（横向画布）
+        CANVAS_HEIGHT = 1181
         
-        MARGIN_TOP = 200      # 上白边（文案区域）
-        MARGIN_BOTTOM = 200   # 下白边
-        MARGIN_SIDES = 40     # 左右白边（较小）
+        MARGIN_TOP = 30       # 上白边
+        MARGIN_BOTTOM = 200   # 下白边（文案区域，紧凑）
+        MARGIN_SIDES = 40     # 左右白边
         
         PHOTO_WIDTH = CANVAS_WIDTH - (MARGIN_SIDES * 2)
         PHOTO_HEIGHT = CANVAS_HEIGHT - MARGIN_TOP - MARGIN_BOTTOM
@@ -155,11 +155,11 @@ def render_polaroid(
     # 绘制
     draw = ImageDraw.Draw(canvas)
     
-    # 绘制文案区域
+    # 绘制文案区域 - 横版和竖版都在底部白边，紧凑排列
     if is_landscape:
-        text_y = MARGIN_TOP + 40  # 横版在顶部白边
+        text_y = MARGIN_TOP + PHOTO_HEIGHT + 40  # 横版在底部白边，紧凑间距
     else:
-        text_y = MARGIN_TOP + PHOTO_HEIGHT + 60  # 竖版在下部白边
+        text_y = MARGIN_TOP + PHOTO_HEIGHT + 60  # 竖版在底部大白边
     
     # 文案
     if caption:
@@ -227,8 +227,8 @@ def render_polaroid(
     # 添加阴影效果（轻微）
     draw = ImageDraw.Draw(canvas)
     
-    # 绘制文案区域
-    text_y = MARGIN_TOP + PHOTO_HEIGHT + 50
+    # 绘制文案区域 - 增大与照片的间距
+    text_y = MARGIN_TOP + PHOTO_HEIGHT + 80
     
     # 文案
     if caption:
@@ -452,15 +452,15 @@ def render_classic(
                 x = (CANVAS_WIDTH - text_width) // 2
                 draw.text((x, text_y), line, fill='#FFFFFF', font=font_caption)
                 text_y += 55
+            # 文案和日期之间留出间距
+            text_y += 30
         else:
             x = (CANVAS_WIDTH - text_width) // 2
             draw.text((x, text_y), words, fill='#FFFFFF', font=font_caption)
-            text_y += 65
+            # 文案和日期之间留出间距 - 增大间距避免重叠
+            text_y += 50
     
-    # 日期和地点 - 固定在底部
-    bottom_margin = 40
-    
-    # 日期位置
+    # 日期和地点 - 使用文案结束后的位置
     if taken_at or location:
         info_parts = []
         if taken_at:
@@ -473,8 +473,7 @@ def render_classic(
         bbox = draw.textbbox((0, 0), info_text, font=font_info)
         text_width = bbox[2] - bbox[0]
         x = (CANVAS_WIDTH - text_width) // 2
-        date_y = CANVAS_HEIGHT - bottom_margin
-        draw.text((x, date_y), info_text, fill='#CCCCCC', font=font_info)
+        draw.text((x, text_y), info_text, fill='#CCCCCC', font=font_info)
     
     # 保存
     os.makedirs(output_dir, exist_ok=True)

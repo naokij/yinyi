@@ -21,6 +21,8 @@ export const usePhotoStore = defineStore('photos', {
     stats: null,
     scanStatus: {
       status: 'idle',
+      scanner_status: 'idle',
+      analyzer_status: 'idle',
       total_photos: 0,
       new_photos: 0,
       pending: 0,

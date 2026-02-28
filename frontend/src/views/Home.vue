@@ -14,6 +14,14 @@
         <div v-if="isScannerRunning" class="scanner-status running">
           🔄 扫描进行中...
         </div>
+        <div v-else-if="photoStore.scanStatus.scanner_status === 'completed'" class="scanner-status completed">
+          ✅ 扫描完成
+        </div>
+        
+        <!-- 分析器状态 -->
+        <div v-if="isAnalyzing" class="analyzer-status running">
+          🤖 AI 分析进行中...
+        </div>
         
         <div class="stats">
           <div class="stat-item">
@@ -142,14 +150,14 @@ export default {
       return Math.round((analyzed / total) * 100)
     })
     
-    // 正在分析：请求中 或 有照片正在分析
-    const isAnalyzing = computed(() => 
-      analyzing.value || photoStore.scanStatus.analyzing > 0
-    )
-    
     // 扫描器是否正在运行
     const isScannerRunning = computed(() => 
-      photoStore.scanStatus.status === 'running'
+      photoStore.scanStatus.scanner_status === 'scanning'
+    )
+    
+    // 分析器是否正在运行
+    const isAnalyzing = computed(() => 
+      photoStore.scanStatus.analyzer_status === 'analyzing'
     )
     
     // 预估剩余时间
@@ -335,6 +343,25 @@ export default {
 .scanner-status.running {
   background: #e8f5e9;
   color: #2e7d32;
+  animation: pulse 2s infinite;
+}
+
+.scanner-status.completed {
+  background: #e3f2fd;
+  color: #1565c0;
+}
+
+.analyzer-status {
+  padding: 8px 12px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.analyzer-status.running {
+  background: #fce4ec;
+  color: #c2185b;
   animation: pulse 2s infinite;
 }
 

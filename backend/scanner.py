@@ -4,6 +4,7 @@
 
 import os
 import hashlib
+import threading
 from pathlib import Path
 from datetime import datetime
 from typing import Optional, Set
@@ -15,6 +16,36 @@ register_heif_opener()
 
 from database import SessionLocal, Photo as PhotoModel
 from config import settings
+
+
+# 全局扫描状态
+_scanner_state = {
+    "status": "idle",  # idle, scanning, completed
+    "started_at": None,
+    "completed_at": None,
+    "lock": threading.Lock()
+}
+
+
+def set_scanner_status(status: str):
+    """设置扫描器状态"""
+    with _scanner_state["lock"]:
+        _scanner_state["status"] = status
+        if status == "scanning":
+            _scanner_state["started_at"] = datetime.now()
+            _scanner_state["completed_at"] = None
+        elif status == "completed":
+            _scanner_state["completed_at"] = datetime.now()
+
+
+def get_scanner_status() -> dict:
+    """获取扫描器状态"""
+    with _scanner_state["lock"]:
+        return {
+            "status": _scanner_state["status"],
+            "started_at": _scanner_state["started_at"],
+            "completed_at": _scanner_state["completed_at"]
+        }
 
 
 def compute_file_hash(file_path: str) -> str:
@@ -78,6 +109,9 @@ def scan_directory_task(
     check_modified: bool = True
 ):
     """扫描目录任务（后台执行）"""
+    # 设置扫描状态为进行中
+    set_scanner_status("scanning")
+    
     db = SessionLocal()
     
     try:
@@ -85,6 +119,7 @@ def scan_directory_task(
         
         if not scan_path.exists():
             print(f"扫描路径不存在: {scan_path}")
+            set_scanner_status("idle")
             return
         
         print(f"[扫描] 开始扫描: {scan_path}")
@@ -179,6 +214,9 @@ def scan_directory_task(
         
         db.commit()
         
+        # 设置扫描状态为完成
+        set_scanner_status("completed")
+        
         print(f"[完成] 扫描完成!")
         print(f"   新增: {new_count}")
         print(f"   重复: {duplicate_count}")
@@ -186,6 +224,7 @@ def scan_directory_task(
         
     except Exception as e:
         print(f"[错误] 扫描失败: {e}")
+        set_scanner_status("idle")
         db.rollback()
         raise
     finally:

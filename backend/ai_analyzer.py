@@ -20,6 +20,32 @@ from config import settings
 # iflow API 并发限制为 1，使用锁确保同时只分析一张照片
 iflow_lock = threading.Lock()
 
+# 全局分析器状态
+_analyzer_state = {
+    "status": "idle",  # idle, analyzing
+    "started_at": None,
+    "lock": threading.Lock()
+}
+
+
+def set_analyzer_status(status: str):
+    """设置分析器状态"""
+    with _analyzer_state["lock"]:
+        _analyzer_state["status"] = status
+        from datetime import datetime
+        if status == "analyzing":
+            _analyzer_state["started_at"] = datetime.now()
+
+
+def get_analyzer_status() -> dict:
+    """获取分析器状态"""
+    with _analyzer_state["lock"]:
+        return {
+            "status": _analyzer_state["status"],
+            "started_at": _analyzer_state["started_at"]
+        }
+
+
 print("[AI模块] 已加载 - 支持图片自动压缩(10MB限制)")
 
 
@@ -312,14 +338,19 @@ def generate_caption(image_base64: str, description: str, api_key: str, base_url
 
 
 def analyze_photo_task(photo_id: int):
+    # 设置分析器状态为进行中
+    set_analyzer_status("analyzing")
+    
     db = SessionLocal()
     try:
         photo = db.query(PhotoModel).filter(PhotoModel.id == photo_id).first()
         if not photo:
             print(f"[错误] 照片不存在: {photo_id}")
+            set_analyzer_status("idle")
             return
         if photo.status == "analyzed":
             print(f"[跳过] 照片已分析，跳过: {photo.filename}")
+            set_analyzer_status("idle")
             return
 
         print(f"[AI] 开始分析: {photo.filename}")
@@ -452,6 +483,8 @@ def analyze_photo_task(photo_id: int):
         print(f"[错误] 分析任务异常: {e}")
         db.rollback()
     finally:
+        # 分析完成，重置分析器状态
+        set_analyzer_status("idle")
         db.close()
 
 

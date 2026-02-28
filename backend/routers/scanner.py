@@ -7,9 +7,11 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional
 import threading
+from datetime import datetime
 
 from database import get_db
-from scanner import scan_directory_task
+from scanner import scan_directory_task, get_scanner_status
+from ai_analyzer import get_analyzer_status
 
 
 router = APIRouter()
@@ -46,7 +48,9 @@ class ScanRequest(BaseModel):
 
 
 class ScanStatus(BaseModel):
-    status: str
+    status: str  # 综合状态: idle, scanning, analyzing
+    scanner_status: str = "idle"  # 扫描器状态: idle, scanning, completed
+    analyzer_status: str = "idle"  # 分析器状态: idle, analyzing
     total_photos: int
     new_photos: int
     pending: int
@@ -77,7 +81,7 @@ async def start_scan(
 
 @router.get("/status", response_model=ScanStatus)
 async def get_scan_status(db: Session = Depends(get_db)):
-    """获取扫描状态"""
+    """获取扫描和分析状态"""
     from database import Photo as PhotoModel
     
     total = db.query(PhotoModel).count()
@@ -86,6 +90,19 @@ async def get_scan_status(db: Session = Depends(get_db)):
     analyzing = db.query(PhotoModel).filter(PhotoModel.status == "analyzing").count()
     analyzed = db.query(PhotoModel).filter(PhotoModel.status == "analyzed").count()
     
+    # 获取真实的扫描器状态
+    scanner_status = get_scanner_status()
+    # 获取真实的分析器状态
+    analyzer_status = get_analyzer_status()
+    
+    # 综合状态：扫描进行中 或 分析进行中
+    if scanner_status["status"] == "scanning":
+        overall_status = "scanning"
+    elif analyzer_status["status"] == "analyzing":
+        overall_status = "analyzing"
+    else:
+        overall_status = "idle"
+    
     # 计算预估剩余时间
     avg_time = get_average_analyze_time()
     estimated_remaining = None
@@ -93,7 +110,9 @@ async def get_scan_status(db: Session = Depends(get_db)):
         estimated_remaining = avg_time * new
     
     return ScanStatus(
-        status="running" if new > 0 or analyzing > 0 else "idle",
+        status=overall_status,
+        scanner_status=scanner_status["status"],
+        analyzer_status=analyzer_status["status"],
         total_photos=total,
         new_photos=new,
         pending=new,
