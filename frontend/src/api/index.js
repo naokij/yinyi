@@ -20,7 +20,10 @@ export const photoApi = {
   getPhoto: (id) => api.get(`/photos/${id}`),
   
   // 删除照片
-  deletePhoto: (id) => api.delete(`/photos/${id}`)
+  deletePhoto: (id) => api.delete(`/photos/${id}`),
+
+  // 更新文案
+  updateCaption: (id, caption) => api.put(`/photos/${id}/caption`, { caption })
 }
 
 // 扫描相关 API

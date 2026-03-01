@@ -313,3 +313,28 @@ async def get_thumbnail(photo_id: int, size: int = Query(300, ge=50, le=800), db
     """获取照片缩略图"""
     # TODO: 实现缩略图生成和缓存
     pass
+
+
+class UpdateCaptionRequest(BaseModel):
+    caption: str
+
+
+@router.put("/{photo_id}/caption")
+async def update_caption(photo_id: int, request: UpdateCaptionRequest, db: Session = Depends(get_db)):
+    """更新照片的文案"""
+    photo = db.query(PhotoModel).filter(PhotoModel.id == photo_id).first()
+    if not photo:
+        raise HTTPException(status_code=404, detail="照片不存在")
+
+    # 如果没有分析记录，先创建
+    if not photo.analysis:
+        from database import Analysis as AnalysisModel
+        analysis = AnalysisModel(photo_id=photo_id)
+        db.add(analysis)
+        db.flush()
+
+    # 更新文案
+    photo.analysis.caption = request.caption
+    db.commit()
+
+    return {"message": "文案已更新", "caption": request.caption}

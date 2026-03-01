@@ -186,7 +186,16 @@
               rows="3"
               placeholder="输入你想打印的文案..."
             ></textarea>
-            <p class="hint">AI 生成：{{ photo.caption || '暂无' }}</p>
+            <div class="caption-actions">
+              <p class="hint">AI 生成：{{ photo.caption || '暂无' }}</p>
+              <button 
+                class="btn btn-small"
+                @click="saveCaption"
+                :disabled="savingCaption"
+              >
+                {{ savingCaption ? '保存中...' : '保存文案' }}
+              </button>
+            </div>
           </div>
           
           <div class="form-group">
@@ -248,6 +257,7 @@ export default {
     const previewReady = ref(false)
     const generating = ref(false)
     const exporting = ref(false)
+    const savingCaption = ref(false)
     const customCaption = ref('')
     const includeDate = ref(true)
     const includeLocation = ref(true)
@@ -387,6 +397,19 @@ export default {
         generating.value = false
       }
     }
+
+    const saveCaption = async () => {
+      savingCaption.value = true
+      try {
+        await photoApi.updateCaption(photoId, customCaption.value)
+        alert('文案已保存！')
+      } catch (error) {
+        console.error('保存文案失败:', error)
+        alert('保存失败，请重试')
+      } finally {
+        savingCaption.value = false
+      }
+    }
     
     const exportPhoto = async () => {
       exporting.value = true
@@ -448,6 +471,8 @@ export default {
       resetCrop,
       setTemplate,
       generatePreview,
+      saveCaption,
+      savingCaption,
       exportPhoto,
       formatDate
     }
@@ -681,6 +706,13 @@ export default {
 .form-group .hint {
   font-size: 12px;
   color: #999;
+  margin-top: 8px;
+}
+
+.caption-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   margin-top: 8px;
 }
 
