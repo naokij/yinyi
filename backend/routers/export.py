@@ -38,9 +38,12 @@ class BatchExportRequest(BaseModel):
 @router.post("/preview")
 async def preview_export(request: ExportRequest, db: Session = Depends(get_db)):
     """生成打印预览图"""
+    print(f"[PREVIEW] Received request: photo_id={request.photo_id}, template={request.template}")
     photo = db.query(PhotoModel).filter(PhotoModel.id == request.photo_id).first()
     if not photo:
         raise HTTPException(status_code=404, detail="照片不存在")
+    
+    print(f"[PREVIEW] Photo path: {photo.path}")
     
     # 检查照片是否已分析
     if photo.status != "analyzed":

@@ -90,10 +90,19 @@ def extract_exif(file_path: str) -> dict:
 
 
 def get_image_dimensions(file_path: str) -> tuple:
-    """获取图片尺寸"""
+    """获取图片尺寸（考虑EXIF旋转）"""
     try:
         with Image.open(file_path) as img:
-            return img.size
+            width, height = img.size
+            try:
+                exif = img._getexif()
+                if exif:
+                    orientation = exif.get(0x0112)
+                    if orientation in (5, 6, 7, 8):
+                        width, height = height, width
+            except:
+                pass
+            return (width, height)
     except:
         return (None, None)
 

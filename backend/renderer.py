@@ -3,7 +3,7 @@
 米家 6 寸相纸：100×148mm @ 300 DPI = 1181×1748 px
 """
 
-from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageEnhance
+from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageEnhance, ImageOps
 from pathlib import Path
 from datetime import datetime
 from typing import Optional
@@ -72,21 +72,29 @@ def render_polaroid(
     - 横版 (landscape): 白边在上下，照片 4:3
     """
     
-    # 加载原图检测方向
+    # 加载原图检测方向（考虑EXIF旋转）
     with Image.open(photo_path) as img_orig:
         if img_orig.mode in ('RGBA', 'LA', 'P'):
             img_orig = img_orig.convert('RGBA')
         orig_width, orig_height = img_orig.size
+        exif = img_orig._getexif()
+        if exif:
+            orientation = exif.get(0x0112)
+            if orientation in (5, 6, 7, 8):
+                orig_width, orig_height = orig_height, orig_width
         is_landscape = orig_width > orig_height
+    
+    # 安全边距（打印时四边会被裁剪，约 3mm = 35px @ 300DPI）
+    SAFE_MARGIN = 35
     
     if is_landscape:
         # 横版拍立得：白边在上下，画布横向，照片偏上，文字在下方紧凑排列
         CANVAS_WIDTH = 1748   # 宽度 > 高度（横向画布）
         CANVAS_HEIGHT = 1181
         
-        MARGIN_TOP = 30       # 上白边
-        MARGIN_BOTTOM = 200   # 下白边（文案区域，紧凑）
-        MARGIN_SIDES = 40     # 左右白边
+        MARGIN_TOP = 30 + SAFE_MARGIN    # 上白边 + 安全边距
+        MARGIN_BOTTOM = 200 + SAFE_MARGIN # 下白边（文案区域，紧凑）+ 安全边距
+        MARGIN_SIDES = 40 + SAFE_MARGIN   # 左右白边 + 安全边距
         
         PHOTO_WIDTH = CANVAS_WIDTH - (MARGIN_SIDES * 2)
         PHOTO_HEIGHT = CANVAS_HEIGHT - MARGIN_TOP - MARGIN_BOTTOM
@@ -96,9 +104,9 @@ def render_polaroid(
         CANVAS_WIDTH = 1181
         CANVAS_HEIGHT = 1748
         
-        MARGIN_TOP = 40
-        MARGIN_BOTTOM = 375   # 下白边（文案区域）
-        MARGIN_SIDES = 90
+        MARGIN_TOP = 40 + SAFE_MARGIN
+        MARGIN_BOTTOM = 375 + SAFE_MARGIN   # 下白边（文案区域）+ 安全边距
+        MARGIN_SIDES = 90 + SAFE_MARGIN    # 左右白边 + 安全边距
         
         PHOTO_WIDTH = CANVAS_WIDTH - (MARGIN_SIDES * 2)
         PHOTO_HEIGHT = CANVAS_HEIGHT - MARGIN_TOP - MARGIN_BOTTOM
@@ -109,6 +117,9 @@ def render_polaroid(
     
     # 加载并处理原图
     with Image.open(photo_path) as img:
+        # 使用 Pillow 官方方法正确处理 EXIF 方向
+        img = ImageOps.exif_transpose(img)
+        
         # 转换为 RGB（处理透明通道）
         if img.mode in ('RGBA', 'LA', 'P'):
             background = Image.new('RGB', img.size, 'white')
@@ -118,8 +129,8 @@ def render_polaroid(
             img = background
         else:
             img = img.convert('RGB')
-        
-        # 计算裁剪区域（支持手动调整裁切中心）
+    
+    # 计算裁剪区域（支持手动调整裁切中心）
         img_ratio = img.width / img.height
         
         if img_ratio > target_ratio:
@@ -318,22 +329,39 @@ def render_classic(
     CANVAS_WIDTH = 1181
     CANVAS_HEIGHT = 1748
     
-    # 加载原图检测方向
+    # 安全边距（打印时四边会被裁剪，约 3mm = 35px @ 300DPI）
+    SAFE_MARGIN = 35
+    
+    # 加载原图检测方向（考虑EXIF旋转）
     with Image.open(photo_path) as img_orig:
         if img_orig.mode in ('RGBA', 'LA', 'P'):
             img_orig = img_orig.convert('RGBA')
         orig_width, orig_height = img_orig.size
+        exif = img_orig._getexif()
+        if exif:
+            orientation = exif.get(0x0112)
+            if orientation in (5, 6, 7, 8):
+                orig_width, orig_height = orig_height, orig_width
         is_landscape = orig_width > orig_height
     
     if is_landscape:
         # 横版：交换宽高
         CANVAS_WIDTH, CANVAS_HEIGHT = CANVAS_HEIGHT, CANVAS_WIDTH
     
+    # 照片区域需要留出安全边距
+    photo_x = SAFE_MARGIN
+    photo_y = SAFE_MARGIN
+    photo_width = CANVAS_WIDTH - (SAFE_MARGIN * 2)
+    photo_height = CANVAS_HEIGHT - (SAFE_MARGIN * 2)
+    
     # 创建白色画布
     canvas = Image.new('RGB', (CANVAS_WIDTH, CANVAS_HEIGHT), color='white')
     
     # 加载并处理原图
     with Image.open(photo_path) as img:
+        # 使用 Pillow 官方方法正确处理 EXIF 方向
+        img = ImageOps.exif_transpose(img)
+        
         # 转换为 RGB（处理透明通道）
         if img.mode in ('RGBA', 'LA', 'P'):
             background = Image.new('RGB', img.size, 'white')
@@ -343,10 +371,10 @@ def render_classic(
             img = background
         else:
             img = img.convert('RGB')
-        
-        # 填满整个画布（保持比例，可能裁切）
+    
+    # 填满整个画布（保持比例，可能裁切）- 使用带安全边距的区域
         img_ratio = img.width / img.height
-        target_ratio = CANVAS_WIDTH / CANVAS_HEIGHT
+        target_ratio = photo_width / photo_height
         
         if img_ratio > target_ratio:
             # 图片太宽，裁剪左右
@@ -363,15 +391,15 @@ def render_classic(
             top = max(0, min(top, max_top))
             img = img.crop((0, top, img.width, top + new_height))
         
-        # 缩放到画布尺寸（填满）
-        img = img.resize((CANVAS_WIDTH, CANVAS_HEIGHT), Image.Resampling.LANCZOS)
+        # 缩放到带安全边距的尺寸
+        img = img.resize((photo_width, photo_height), Image.Resampling.LANCZOS)
         
         # 轻微增强
         enhancer = ImageEnhance.Contrast(img)
         img = enhancer.enhance(1.05)
     
-    # 粘贴照片
-    canvas.paste(img, (0, 0))
+    # 粘贴照片（带安全边距）
+    canvas.paste(img, (photo_x, photo_y))
     
     # 绘制底部渐变层
     draw = ImageDraw.Draw(canvas)
