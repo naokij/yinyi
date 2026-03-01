@@ -338,3 +338,98 @@ async def update_caption(photo_id: int, request: UpdateCaptionRequest, db: Sessi
     db.commit()
 
     return {"message": "文案已更新", "caption": request.caption}
+
+
+STYLE_PROMPTS = {
+    "warm": "风格要求：温馨、温暖，带一点怀旧感",
+    "funny": "风格要求：轻松、有趣，带一点幽默",
+    "poetic": "风格要求：诗意、含蓄，有文学美感",
+    "humor": "风格要求：冷幽默、自嘲，轻微讽刺",
+    "default": ""
+}
+
+
+class GenerateCaptionRequest(BaseModel):
+    style: Optional[str] = "default"
+    custom_prompt: Optional[str] = ""
+
+
+@router.post("/{photo_id}/caption/generate")
+async def generate_caption(
+    photo_id: int,
+    request: GenerateCaptionRequest,
+    db: Session = Depends(get_db)
+):
+    """AI生成文案"""
+    import os
+    from pathlib import Path
+    import sys
+    sys.path.insert(0, str(Path(__file__).parent.parent))
+    from ai_analyzer import generate_caption as ai_generate_caption, encode_image_to_base64
+
+    photo = db.query(PhotoModel).filter(PhotoModel.id == photo_id).first()
+    if not photo:
+        raise HTTPException(status_code=404, detail="照片不存在")
+
+    if not os.path.exists(photo.path):
+        raise HTTPException(status_code=404, detail="照片文件不存在")
+
+    # 获取图片描述（如果已有分析结果）
+    description = ""
+    if photo.analysis and photo.analysis.description:
+        description = photo.analysis.description
+
+    # 构建prompt
+    style_prompt = STYLE_PROMPTS.get(request.style, "")
+    custom_prompt = request.custom_prompt if request.custom_prompt else ""
+
+    # 编码图片
+    try:
+        image_base64 = encode_image_to_base64(photo.path)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"图片处理失败: {str(e)}")
+
+    # 调用AI生成文案
+    try:
+        # 临时修改prompt以支持风格
+        from ai_analyzer import CAPTION_PROMPT
+        original_prompt = CAPTION_PROMPT
+
+        # 添加风格要求
+        if style_prompt:
+            modified_prompt = f"{CAPTION_PROMPT}\n\n{style_prompt}"
+        elif custom_prompt:
+            modified_prompt = f"{CAPTION_PROMPT}\n\n自定义要求：{custom_prompt}"
+        else:
+            modified_prompt = CAPTION_PROMPT
+
+        # 临时替换prompt
+        import ai_analyzer
+        ai_analyzer.CAPTION_PROMPT = modified_prompt
+
+        # 获取API配置
+        ai_backend = os.getenv("AI_BACKEND", "ollama")
+        api_key = os.getenv("IFLOW_API_KEY", "")
+        base_url = os.getenv("IFLOW_BASE_URL", "https://apis.iflow.cn/v1")
+        model = os.getenv("IFLOW_MODEL", "qwen3-vl-plus")
+
+        # 调用生成函数
+        caption = ai_generate_caption(
+            image_base64=image_base64,
+            description=description,
+            api_key=api_key,
+            base_url=base_url,
+            model=model
+        )
+
+        # 恢复原始prompt
+        ai_analyzer.CAPTION_PROMPT = original_prompt
+
+        if not caption:
+            raise HTTPException(status_code=500, detail="AI生成文案失败")
+
+        return {"caption": caption}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"生成文案失败: {str(e)}")

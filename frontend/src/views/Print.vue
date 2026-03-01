@@ -197,6 +197,37 @@
               </button>
             </div>
           </div>
+
+          <div class="ai-caption-section">
+            <div class="form-group">
+              <label>AI 生成风格</label>
+              <select v-model="captionStyle" class="style-select">
+                <option value="default">默认风格</option>
+                <option value="warm">温馨</option>
+                <option value="funny">有趣</option>
+                <option value="poetic">诗意</option>
+                <option value="humor">冷幽默</option>
+              </select>
+            </div>
+            
+            <div class="form-group" v-if="captionStyle === 'default'">
+              <label>自定义提示词（可选）</label>
+              <input 
+                v-model="customPrompt" 
+                type="text"
+                class="style-input"
+                placeholder="例如：关于友情、回忆童年..."
+              />
+            </div>
+            
+            <button 
+              class="btn btn-secondary btn-small"
+              @click="generateAICaption"
+              :disabled="generatingCaption"
+            >
+              {{ generatingCaption ? '生成中...' : '🤖 AI生成文案' }}
+            </button>
+          </div>
           
           <div class="form-group">
             <label class="checkbox">
@@ -258,7 +289,10 @@ export default {
     const generating = ref(false)
     const exporting = ref(false)
     const savingCaption = ref(false)
+    const generatingCaption = ref(false)
     const customCaption = ref('')
+    const captionStyle = ref('default')
+    const customPrompt = ref('')
     const includeDate = ref(true)
     const includeLocation = ref(true)
     const template = ref('polaroid')
@@ -410,6 +444,22 @@ export default {
         savingCaption.value = false
       }
     }
+
+    const generateAICaption = async () => {
+      generatingCaption.value = true
+      try {
+        const response = await photoApi.generateCaption(photoId, {
+          style: captionStyle.value,
+          custom_prompt: customPrompt.value
+        })
+        customCaption.value = response.data.caption
+      } catch (error) {
+        console.error('AI生成文案失败:', error)
+        alert('AI生成失败，请重试')
+      } finally {
+        generatingCaption.value = false
+      }
+    }
     
     const exportPhoto = async () => {
       exporting.value = true
@@ -456,6 +506,9 @@ export default {
       generating,
       exporting,
       customCaption,
+      captionStyle,
+      customPrompt,
+      generatingCaption,
       includeDate,
       includeLocation,
       template,
@@ -473,6 +526,7 @@ export default {
       generatePreview,
       saveCaption,
       savingCaption,
+      generateAICaption,
       exportPhoto,
       formatDate
     }
@@ -713,6 +767,39 @@ export default {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  margin-top: 8px;
+}
+
+.ai-caption-section {
+  background: #f8f9fa;
+  padding: 12px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
+.ai-caption-section .form-group {
+  margin-bottom: 12px;
+}
+
+.style-select {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 14px;
+  background: white;
+}
+
+.style-input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+.ai-caption-section .btn {
+  width: 100%;
   margin-top: 8px;
 }
 

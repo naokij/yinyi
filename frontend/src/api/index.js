@@ -23,7 +23,10 @@ export const photoApi = {
   deletePhoto: (id) => api.delete(`/photos/${id}`),
 
   // 更新文案
-  updateCaption: (id, caption) => api.put(`/photos/${id}/caption`, { caption })
+  updateCaption: (id, caption) => api.put(`/photos/${id}/caption`, { caption }),
+
+  // AI生成文案
+  generateCaption: (id, data) => api.post(`/photos/${id}/caption/generate`, data)
 }
 
 // 扫描相关 API
