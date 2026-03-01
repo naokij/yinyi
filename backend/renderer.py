@@ -74,14 +74,9 @@ def render_polaroid(
     
     # 加载原图检测方向（考虑EXIF旋转）
     with Image.open(photo_path) as img_orig:
-        if img_orig.mode in ('RGBA', 'LA', 'P'):
-            img_orig = img_orig.convert('RGBA')
+        # 使用官方方法处理EXIF方向
+        img_orig = ImageOps.exif_transpose(img_orig)
         orig_width, orig_height = img_orig.size
-        exif = img_orig._getexif()
-        if exif:
-            orientation = exif.get(0x0112)
-            if orientation in (5, 6, 7, 8):
-                orig_width, orig_height = orig_height, orig_width
         is_landscape = orig_width > orig_height
     
     # 安全边距（打印时四边会被裁剪，约 3mm = 35px @ 300DPI）
@@ -334,14 +329,8 @@ def render_classic(
     
     # 加载原图检测方向（考虑EXIF旋转）
     with Image.open(photo_path) as img_orig:
-        if img_orig.mode in ('RGBA', 'LA', 'P'):
-            img_orig = img_orig.convert('RGBA')
+        img_orig = ImageOps.exif_transpose(img_orig)
         orig_width, orig_height = img_orig.size
-        exif = img_orig._getexif()
-        if exif:
-            orientation = exif.get(0x0112)
-            if orientation in (5, 6, 7, 8):
-                orig_width, orig_height = orig_height, orig_width
         is_landscape = orig_width > orig_height
     
     if is_landscape:

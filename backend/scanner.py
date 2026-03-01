@@ -9,7 +9,7 @@ from pathlib import Path
 from datetime import datetime
 from typing import Optional, Set
 import piexif
-from PIL import Image
+from PIL import Image, ImageOps
 from pillow_heif import register_heif_opener
 
 register_heif_opener()
@@ -93,16 +93,8 @@ def get_image_dimensions(file_path: str) -> tuple:
     """获取图片尺寸（考虑EXIF旋转）"""
     try:
         with Image.open(file_path) as img:
-            width, height = img.size
-            try:
-                exif = img._getexif()
-                if exif:
-                    orientation = exif.get(0x0112)
-                    if orientation in (5, 6, 7, 8):
-                        width, height = height, width
-            except:
-                pass
-            return (width, height)
+            img = ImageOps.exif_transpose(img)
+            return img.size
     except:
         return (None, None)
 
