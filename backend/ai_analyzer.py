@@ -217,6 +217,69 @@ def encode_image_to_base64(image_path: str, max_size_mb: float = 7.0) -> str:
             return base64.b64encode(compressed_data).decode("utf-8")
 
 
+# caption 校验：thinking model 偶尔会把 prompt+推理过程回显到 content
+# 正常文案应短（< 50 字符）、不包含 prompt 关键词
+CAPTION_PROMPT_KEYWORDS = [
+    "首先", "其次", "用户", "创作原则", "画外之意", "电子相框",
+    "请生成", "请输出", "格式要求", "如下", "要求", "指令", "思考",
+    "分析", "判断", "应该", "根据", "原则", "风格", "避免使用",
+    "严禁", "照片描述：", "不能", "基于图片",
+]
+
+
+def validate_caption(raw: str) -> str:
+    """校验并清洗 caption：
+    - 长度 > 50 字符 → 丢弃（正常文案 8-24 字）
+    - 包含 prompt 关键词 → 丢弃（说明模型回显了 prompt 或思考过程）
+    - 末尾省略号/逗号 → 截断标志，丢弃
+    - markdown code block → 尝试提取最后一行
+    返回清洗后的 caption；不合格返回空字符串
+    """
+    if not raw:
+        return ""
+    text = raw.strip()
+
+    # 1. markdown code block: 提取 ``` ... ``` 内的内容
+    if text.startswith("```") and text.endswith("```"):
+        # 拿掉首尾 ``` 后，剥掉 language tag（如 ```json），剩下的 body
+        body = text.strip("`").strip()
+        if body.startswith(("json", "JSON")):
+            body = body[4:].strip()
+        # 优先提取 "caption": "..." 字段
+        import re
+        m = re.search(r'"caption"\s*:\s*"([^"]+)"', body)
+        if m and 4 <= len(m.group(1)) <= 50:
+            text = m.group(1)
+        else:
+            # 否则按行找最短的非空行
+            lines = [l.strip() for l in body.split("\n") if l.strip() and not l.strip().startswith(("{", "}"))]
+            candidates = [l for l in lines if 4 <= len(l) <= 50]
+            if candidates:
+                text = min(candidates, key=len)
+
+    # 2. 截断标志
+    if text.endswith(("...", "，", "、", " ", ";")):
+        print(f"  [caption] 丢弃（截断标志）: {text[:60]!r}")
+        return ""
+
+    # 3. prompt 回显检测
+    for kw in CAPTION_PROMPT_KEYWORDS:
+        if kw in text:
+            print(f"  [caption] 丢弃（含 prompt 关键词 {kw!r}）: {text[:60]!r}")
+            return ""
+
+    # 4. 长度检查
+    if len(text) > 50:
+        print(f"  [caption] 丢弃（过长 {len(text)} 字符）: {text[:60]!r}")
+        return ""
+
+    # 5. 至少 4 字符
+    if len(text) < 4:
+        return ""
+
+    return text
+
+
 def parse_result(content: str) -> dict:
     import re
     try:
@@ -391,6 +454,22 @@ def analyze_photo_task(photo_id: int):
             set_analyzer_status("idle")
             return
 
+        # 防御性 zombie 检测
+        # 情况 A：status=analyzing + 分析完整 → 上次崩溃，直接跳过
+        if photo.status == "analyzing" and photo.analysis and photo.analysis.model and photo.analysis.memory_score is not None:
+            print(f"[zombie 修复] analysis 完整但 status 卡住，重置为 analyzed: {photo.filename}")
+            photo.status = "analyzed"
+            db.commit()
+            set_analyzer_status("idle")
+            return
+
+        # 情况 B：有残缺 analysis 行（model/mem 为 None）→ 上次崩溃+回写失败，删除旧行重新分析
+        if photo.analysis and (photo.analysis.model is None or photo.analysis.memory_score is None):
+            print(f"[zombie 修复] 残缺 analysis 行，删除后重试: {photo.filename}")
+            db.delete(photo.analysis)
+            db.commit()
+            photo.status = "pending"
+
         print(f"[AI] 开始分析: {photo.filename}")
         photo.status = "analyzing"
         db.commit()
@@ -443,8 +522,12 @@ def analyze_photo_task(photo_id: int):
                         print(f"  [skip] 回忆分 {memory_score:.1f} < {CAPTION_MIN_MEMORY}，跳过文案")
                     else:
                         print(f"  正在生成文案...")
-                        caption = generate_caption(image_base64, description, api_key, base_url, model)
-                        print(f"  文案: {caption[:30] if caption else '(无)'}...")
+                        raw_caption = generate_caption(image_base64, description, api_key, base_url, model)
+                        caption = validate_caption(raw_caption)
+                        if not caption:
+                            print(f"  [caption] 校验丢弃（疑似推理截断或 prompt 回显）")
+                        else:
+                            print(f"  文案: {caption!r}")
             elif ai_backend == "ollama":
                 score_result = call_ollama(image_base64, ANALYSIS_PROMPT, "http://localhost:11434", model)
                 
@@ -463,8 +546,12 @@ def analyze_photo_task(photo_id: int):
                     print(f"  [skip] 回忆分 {memory_score:.1f} < {CAPTION_MIN_MEMORY}，跳过文案")
                 else:
                     print(f"  正在生成文案...")
-                    caption = generate_caption(image_base64, description, "", "http://localhost:11434", model)
-                    print(f"  文案: {caption[:30] if caption else '(无)'}...")
+                    raw_caption = generate_caption(image_base64, description, "", "http://localhost:11434", model)
+                    caption = validate_caption(raw_caption)
+                    if not caption:
+                        print(f"  [caption] 校验丢弃（疑似推理截断或 prompt 回显）")
+                    else:
+                        print(f"  文案: {caption!r}")
             else:
                 score_result = call_vllm(image_base64, ANALYSIS_PROMPT, os.getenv("VLLM_HOST"), model)
                 
@@ -483,8 +570,12 @@ def analyze_photo_task(photo_id: int):
                     print(f"  [skip] 回忆分 {memory_score:.1f} < {CAPTION_MIN_MEMORY}，跳过文案")
                 else:
                     print(f"  正在生成文案...")
-                    caption = generate_caption(image_base64, description, "", os.getenv("VLLM_HOST"), model)
-                    print(f"  文案: {caption[:30] if caption else '(无)'}...")
+                    raw_caption = generate_caption(image_base64, description, "", os.getenv("VLLM_HOST"), model)
+                    caption = validate_caption(raw_caption)
+                    if not caption:
+                        print(f"  [caption] 校验丢弃（疑似推理截断或 prompt 回显）")
+                    else:
+                        print(f"  文案: {caption!r}")
 
             analysis = AnalysisModel(
                 photo_id=photo.id,
