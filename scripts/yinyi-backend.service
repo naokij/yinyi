@@ -1,0 +1,21 @@
+[Unit]
+Description=YinYi (印忆) Photo Memory Assistant
+After=network-online.target
+Wants=network-online.target
+RequiresMountsFor=/mnt/nas/photos
+
+[Service]
+Type=simple
+User=jiangle
+Group=jiangle
+WorkingDirectory=/home/jiangle/project/yinyi/backend
+Environment="PATH=/home/jiangle/project/yinyi/backend/venv/bin:/usr/bin"
+EnvironmentFile=/home/jiangle/project/yinyi/.env
+ExecStart=/home/jiangle/project/yinyi/backend/venv/bin/python main.py
+Restart=always
+RestartSec=5
+StandardOutput=append:/var/log/yinyi/backend.log
+StandardError=append:/var/log/yinyi/backend.log
+
+[Install]
+WantedBy=multi-user.target

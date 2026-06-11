@@ -2,6 +2,8 @@
 AI 分析路由
 """
 
+import os
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -13,6 +15,9 @@ from ai_analyzer import analyze_photo_task
 
 
 router = APIRouter()
+
+# 并行 worker 数（由 ai_analyzer 的 semaphore 二次限 API 调用并发）
+BATCH_WORKERS = int(os.getenv("BATCH_WORKERS", "3"))
 
 
 class AnalysisResponse(BaseModel):
@@ -74,12 +79,20 @@ async def batch_analyze(
     
     db.commit()
     
-    # 启动后台分析任务
-    for photo_id in to_analyze:
-        background_tasks.add_task(analyze_photo_task, photo_id)
-    
+    # 启动后台并行分析任务
+    def _run_in_thread_pool():
+        with ThreadPoolExecutor(max_workers=BATCH_WORKERS) as pool:
+            futures = [pool.submit(analyze_photo_task, pid) for pid in to_analyze]
+            for f in as_completed(futures):
+                try:
+                    f.result()
+                except Exception as e:
+                    print(f"[batch] 任务失败: {e}", flush=True)
+
+    background_tasks.add_task(_run_in_thread_pool)
+
     return {
-        "message": "分析任务已启动",
+        "message": f"分析任务已启动（{BATCH_WORKERS} 并行）",
         "total": len(request.photo_ids),
         "queued": len(to_analyze),
         "skipped": len(already_analyzed),
@@ -136,12 +149,21 @@ async def analyze_all_pending(
             "queued": 0
         }
     
-    # 启动后台分析任务
-    for photo in pending_photos:
-        background_tasks.add_task(analyze_photo_task, photo.id)
-    
+    # 启动后台并行分析任务
+    pending_ids = [p.id for p in pending_photos]
+    def _run_in_thread_pool():
+        with ThreadPoolExecutor(max_workers=BATCH_WORKERS) as pool:
+            futures = [pool.submit(analyze_photo_task, pid) for pid in pending_ids]
+            for f in as_completed(futures):
+                try:
+                    f.result()
+                except Exception as e:
+                    print(f"[analyze-all] 任务失败: {e}", flush=True)
+
+    background_tasks.add_task(_run_in_thread_pool)
+
     return {
-        "message": "分析任务已启动",
+        "message": f"分析任务已启动（{BATCH_WORKERS} 并行，{len(pending_ids)} 张）",
         "total": len(pending_photos),
         "queued": len(pending_photos)
     }

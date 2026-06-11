@@ -7,10 +7,11 @@ This file provides guidelines for AI coding agents working on the YinYi project.
 ## 1. Project Overview
 
 **YinYi (印忆)** - AI Photo Memory Printing Assistant
-- Backend: Python FastAPI (port 8765)
-- Frontend: Vue3 + Vite (port 3000)
+- Backend: Python FastAPI (port 8765) — single-process, also serves frontend `dist`
+- Frontend: Vue3 + Vite (built to `frontend/dist`, served by FastAPI in production)
 - Database: SQLite (`backend/data/yinyi.db`)
-- AI Support: Ollama (local), Iflow API (cloud), vLLM
+- AI Backends: **Agnes `agnes-2.0-flash` (current, free)**, Iflow API, Ollama, vLLM
+- Deployment: Linux + systemd (no Docker, no nginx for LAN use)
 
 ---
 
@@ -344,15 +345,28 @@ frontend/
 
 ## 8. Important Notes
 
-1. **Environment Variables**: Never commit `.env` files
+1. **Environment Variables**: Never commit `.env` files (project root + symlinked to `backend/.env`)
 2. **Data Files**: `backend/data/` and `backend/exports/` are gitignored
 3. **HEIC Support**: Uses Pillow + pillow-heif for conversion
-4. **AI Backends**: Supports Ollama (local), Iflow (cloud API), vLLM
+4. **AI Backends**: Agnes `agnes-2.0-flash` (free, default), Iflow API, Ollama, vLLM
 5. **Database**: SQLite - backup by copying `yinyi.db` file
-6. **Startup Scripts**: Use `start-windows.bat` and `stop-windows.bat` for Windows
-7. **LAN Access**: Add `--host 0.0.0.0` for frontend, configure firewall for ports 3000 and 8765
+6. **Startup Scripts**: `start-windows.bat` / `stop-windows.bat` for Windows; systemd `yinyi-backend.service` for Linux
+7. **LAN Access**: FastAPI binds `0.0.0.0:8765` by default; open firewall for 8765
 8. **Restart Protection**: Photos stuck in `analyzing` status are auto-reset on startup
+9. **NAS Thumbnail Skip**: `scanner.SKIP_DIRS` excludes Synology/QNAP system dirs (`@eaDir`, `@synorec`, `@tmp`, `@quarantine`, `@sharebin`, `#recycle`, `lost+found`) — do NOT remove
+10. **AI Thinking Toggle** (env vars):
+    - `ENABLE_THINKING=true` — score call uses thinking (default)
+    - `ENABLE_CAPTION=true` — generate caption for high-score photos
+    - `ENABLE_CAPTION_THINKING=false` — caption forces thinking off (open-ended task prone to infinite thinking loop)
+    - `CAPTION_MIN_MEMORY=80` — only generate caption when memory_score >= 80
+    - `MAX_CONCURRENT_API_CALLS=3` — semaphore limits API concurrency (Agnes free tier is 20 RPM, server-side serial)
+    - `BATCH_WORKERS=3` — `ThreadPoolExecutor` workers for batch analyze
+11. **AI Adapter Differences**:
+    - **mimo (xiaomimimo)**: thinking is ON by default. Disable via `thinking: {"type": "disabled"}`. Reasoning field: `reasoning_content` + `usage.completion_tokens_details.reasoning_tokens`
+    - **agnes (apihub.agnes-ai)**: thinking is OFF by default. Enable via `chat_template_kwargs: {"enable_thinking": true}`. Reasoning field: `provider_specific_fields.reasoning` + `message.reasoning_content`
+12. **Frontend Served by Backend**: After `npm run build`, `dist/` is mounted at `/assets/...` and `/` returns `index.html`. Catch-all SPA fallback at `/{full_path:path}` for Vue Router history mode.
+13. **NFS Mount**: `RequiresMountsFor=/mnt/nas/photos` in systemd unit; `/etc/fstab` line: `192.168.3.6:/volume1/homes/jiangle/Photos /mnt/nas/photos nfs defaults,_netdev,x-systemd.automount,x-systemd.requires=network-online.target,noatime 0 0`
 
 ---
 
-*Last updated: 2026-02-14*
+*Last updated: 2026-06-11*

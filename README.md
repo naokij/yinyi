@@ -8,14 +8,14 @@
 
 ## ✨ 特性
 
-- 🤖 **AI 智能分析**：支持本地 Qwen3-VL 或云端心流 API 分析照片
-- 💭 **温馨文案**：自动生成感性、温暖的一句话描述
+- 🤖 **AI 智能分析**：支持本地 Qwen3-VL（Ollama）、云端心流 API、免费 Agnes `agnes-2.0-flash`
+- 💭 **温馨文案**：高分照片自动生成感性、温暖的一句话描述
 - 📸 **拍立得风格**：针对米家 6 寸相纸（100×148mm, 2:3）优化的经典留白设计
 - 🖼️ **HEIC 支持**：iPhone 照片自动转码，缓存自动清理
-- 🔍 **智能去重**：基于 SHA-256 文件哈希自动检测重复照片
+- 🔍 **智能去重**：基于 SHA-256 文件哈希自动检测重复照片；自动跳过 NAS 缩略图目录
 - 🏠 **NAS 集成**：支持 SMB/NFS 挂载，照片存 NAS，运行在本机
 - 💻 **跨平台**：支持 Windows、macOS、Linux
-- 🚀 **原生部署**：无需 Docker，Windows 原生运行性能最佳
+- 🚀 **原生部署**：无需 Docker，单进程（FastAPI + 静态前端）即可跑起来
 
 ## 🖨️ 支持的打印机
 
@@ -50,16 +50,29 @@
    - Git for Windows
    - Visual C++ Redistributable (Windows 上 pillow-heif 需要)
 
-2. **选择 AI 后端**（二选一）
+2. **选择 AI 后端**（三选一）
 
-   **方案 A：心流 API（推荐，无需本地 GPU）**
+   **方案 A：Agnes `agnes-2.0-flash`（推荐，**免费**，无需本地 GPU）**
    ```powershell
    # 在 .env 文件中配置：
    AI_BACKEND=iflow
-   IFLOW_API_KEY=your-api-key
+   IFLOW_BASE_URL=https://apihub.agnes-ai.com/v1
+   IFLOW_API_KEY=your-agnes-key
+   IFLOW_MODEL=agnes-2.0-flash
+   ENABLE_THINKING=true
+   ENABLE_CAPTION=true
+   CAPTION_MIN_MEMORY=80
    ```
 
-   **方案 B：本地 Ollama（需要 16GB+ 内存）**
+   **方案 B：心流 API（需要 API key）**
+   ```powershell
+   AI_BACKEND=iflow
+   IFLOW_BASE_URL=https://apis.iflow.cn/v1
+   IFLOW_API_KEY=your-api-key
+   IFLOW_MODEL=qwen3-vl-plus
+   ```
+
+   **方案 C：本地 Ollama（需要 16GB+ 内存）**
    ```powershell
    # 安装 Ollama 并下载模型
    ollama serve              # 保持运行
@@ -149,23 +162,36 @@ yinyi/
 ### 环境变量 (.env)
 
 ```env
-# 照片目录（Windows 示例）
+# 照片目录（Windows 示例；Linux 用绝对路径如 /mnt/nas/photos）
 PHOTOS_DIR=Z:\Photos
 
 # 导出目录
 EXPORTS_DIR=.\exports
 
-# AI 后端选择：ollama / iflow / vllm
+# AI 后端选择：iflow（OpenAI 兼容）/ ollama / vllm
 AI_BACKEND=iflow
+
+# Agnes 配置（推荐，免费）
+IFLOW_BASE_URL=https://apihub.agnes-ai.com/v1
+IFLOW_API_KEY=your-agnes-key
+IFLOW_MODEL=agnes-2.0-flash
+
+# 心流官方 API（云端，需 key）
+IFLOW_BASE_URL=https://apis.iflow.cn/v1
+IFLOW_API_KEY=your-api-key-here
+IFLOW_MODEL=qwen3-vl-plus
 
 # Ollama 配置（本地运行）
 OLLAMA_HOST=http://localhost:11434
 OLLAMA_MODEL=qwen3-vl:4b
 
-# 心流 API 配置（云端，无需本地 GPU）
-IFLOW_API_KEY=your-api-key-here
-IFLOW_MODEL=qwen3-vl-plus
-IFLOW_API_URL=https://api.iflow.cn/v1/chat/completions
+# Thinking & Caption 开关
+ENABLE_THINKING=true           # 评分调用启用 thinking
+ENABLE_CAPTION=true            # 高分照片生成 caption
+ENABLE_CAPTION_THINKING=false  # caption 阶段强制关闭 thinking（避免死循环）
+CAPTION_MIN_MEMORY=80          # memory_score >= 80 才生成 caption
+MAX_CONCURRENT_API_CALLS=3     # 信号量限 API 并发（适配 Agnes 20 RPM）
+BATCH_WORKERS=3                # 批量分析 worker 数
 
 # HEIC 缓存配置（可选）
 HEIC_CACHE_MAX_GB=5.0      # 缓存上限
@@ -196,15 +222,19 @@ volumes:
 
 | AI 后端 | 分析速度 | 内存需求 | 适用场景 | 成本 |
 |---------|----------|----------|----------|------|
-| **心流 API** ⭐ | 3-5 秒/张 | 8GB | 推荐，无需本地 GPU | API 调用费 |
+| **Agnes `agnes-2.0-flash`** ⭐ | 20-30 秒/张（含 thinking）| 8GB | **推荐，免费**，无需本地 GPU | 0 |
+| 心流 API (`qwen3-vl-plus`) | 3-5 秒/张 | 8GB | 国内稳定，需 API key | 约 5 元/百万 tokens |
 | Ollama (本地) | 2-4 秒/张 | 16GB+ | 本地运行，隐私保护 | 免费 |
 | vLLM | 1-2 秒/张 | 24GB+ | 高性能本地部署 | 免费 |
+
+> **注**：Agnes 后端 20-30s 主要来自 thinking + server 端 20 RPM 限速（实测加速比仅 1.25x）。
 
 ### 部署方式对比 (Ryzen 5800H)
 
 | 部署方式 | AI 后端 | 分析速度 | 备注 |
 |----------|---------|----------|------|
 | **Windows 原生** ⭐ | 心流 API | 3-5 秒/张 | 无需 Ollama，启动更快 |
+| **Linux + systemd** ⭐ | Agnes | 20-30 秒/张 | 单进程，无 nginx，systemd 托管 |
 | Windows 原生 | Ollama | 2-4 秒/张 | 需要 16GB+ 内存 |
 | WSL2 + Docker | Ollama | 3-6 秒/张 | 有虚拟化开销 |
 

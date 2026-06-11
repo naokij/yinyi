@@ -18,6 +18,10 @@ from database import SessionLocal, Photo as PhotoModel
 from config import settings
 
 
+#跳过的目录名（NAS 系统目录、缩略图、回收站等）
+SKIP_DIRS = {"@eaDir", "@synorec", "@tmp", "@quarantine", "@sharebin", "#recycle", "lost+found"}
+
+
 # 全局扫描状态
 _scanner_state = {
     "status": "idle",  # idle, scanning, completed
@@ -138,7 +142,11 @@ def scan_directory_task(
         for file_path in scan_path.glob(pattern):
             if not file_path.is_file():
                 continue
-            
+
+            #跳过 NAS 系统目录、缩略图、回收站等
+            if any(part in SKIP_DIRS for part in file_path.parts):
+                continue
+
             if not is_image_file(file_path.name):
                 continue
             

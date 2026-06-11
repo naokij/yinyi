@@ -17,8 +17,20 @@ load_dotenv(env_path, override=True)
 from database import SessionLocal, Photo as PhotoModel, Analysis as AnalysisModel
 from config import settings
 
-# iflow API 并发限制为 1，使用锁确保同时只分析一张照片
-iflow_lock = threading.Lock()
+# API 并发控制：agnes 限速 20 RPM，3 并发相对安全（且单 worker 满载时仍有 5s/req 余量）
+# 由 batch 路由层用 ThreadPoolExecutor 限制总 worker 数，本处额外限 mimo/agnes 调用并发
+MAX_CONCURRENT_API_CALLS = int(os.getenv("MAX_CONCURRENT_API_CALLS", "3"))
+iflow_call_semaphore = threading.Semaphore(MAX_CONCURRENT_API_CALLS)
+
+# 是否生成感性文案 caption（默认关闭，避免双倍 API 调用；用户需要时在 .env 开启）
+ENABLE_CAPTION = os.getenv("ENABLE_CAPTION", "false").lower() in ("1", "true", "yes", "on")
+# caption 阶段是否启用 thinking（默认关闭，开放式任务易触发死循环，content 为空）
+ENABLE_CAPTION_THINKING = os.getenv("ENABLE_CAPTION_THINKING", "false").lower() in ("1", "true", "yes", "on")
+# caption 记忆分阈值（默认 70，仅对真正有价值的照片才生成文案）
+CAPTION_MIN_MEMORY = float(os.getenv("CAPTION_MIN_MEMORY", "70"))
+
+# 评分调用是否启用 thinking
+ENABLE_THINKING = os.getenv("ENABLE_THINKING", "true").lower() in ("1", "true", "yes", "on")
 
 # 全局分析器状态
 _analyzer_state = {
@@ -249,7 +261,7 @@ def call_ollama(image_base64: str, prompt: str, api_url: str, model: str) -> dic
     return parse_result(response.json()["response"])
 
 
-def call_iflow(image_base64: str, prompt: str, api_key: str, base_url: str, model: str) -> dict:
+def call_iflow(image_base64: str, prompt: str, api_key: str, base_url: str, model: str, enable_thinking: bool = True) -> dict:
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
     
     # 构建请求体
@@ -264,14 +276,21 @@ def call_iflow(image_base64: str, prompt: str, api_key: str, base_url: str, mode
                 ]
             }
         ],
-        "max_tokens": 500,
+        "max_tokens": 4000,
         "temperature": 0.7
     }
-    
+    # mimo thinking 是默认开启的（用 thinking.type=disabled 关掉）；agnes 用 chat_template_kwargs 显式开启
+    if not enable_thinking:
+        if "xiaomimimo" in base_url:
+            request_body["thinking"] = {"type": "disabled"}
+    else:
+        if "agnes" in base_url:
+            request_body["chat_template_kwargs"] = {"enable_thinking": True}
+
     print(f"  [DEBUG] Request URL: {base_url}/chat/completions")
     print(f"  [DEBUG] Model: {model}")
     print(f"  [DEBUG] Image base64 length: {len(image_base64)} chars")
-    
+
     try:
         response = httpx.post(
             f"{base_url}/chat/completions",
@@ -279,26 +298,33 @@ def call_iflow(image_base64: str, prompt: str, api_key: str, base_url: str, mode
             json=request_body,
             timeout=120.0
         )
-        
-        # 详细记录错误信息
+
         if response.status_code == 400:
             print(f"  [ERROR] HTTP 400 Bad Request")
             print(f"  [ERROR] Response body: {response.text}")
-            print(f"  [ERROR] Request headers: {headers}")
             raise ValueError(f"API 400 Error: {response.text}")
-        
+
         response.raise_for_status()
-        
-        # Debug: print response structure
+
         resp_json = response.json()
-        print(f"  [DEBUG] Response keys: {list(resp_json.keys())}")
-        
         if "choices" not in resp_json:
             print(f"  [DEBUG] Full response: {resp_json}")
             raise ValueError(f"API response missing 'choices' key. Keys: {list(resp_json.keys())}")
-        
-        return parse_result(resp_json["choices"][0]["message"]["content"])
-        
+
+        message = resp_json["choices"][0]["message"]
+        content = message.get("content") or ""
+        if not content and message.get("reasoning_content"):
+            content = message["reasoning_content"]
+
+        usage = resp_json.get("usage", {})
+        details = usage.get("completion_tokens_details", {})
+        reasoning_tokens = details.get("reasoning_tokens", 0)
+        completion_tokens = usage.get("completion_tokens", 0)
+        if reasoning_tokens:
+            print(f"  [DEBUG] Thinking model: {reasoning_tokens} reasoning + {completion_tokens - reasoning_tokens} content tokens")
+
+        return parse_result(content)
+
     except httpx.HTTPStatusError as e:
         print(f"  [ERROR] HTTP Error: {e.response.status_code}")
         print(f"  [ERROR] Response: {e.response.text}")
@@ -307,30 +333,42 @@ def call_iflow(image_base64: str, prompt: str, api_key: str, base_url: str, mode
 
 def generate_caption(image_base64: str, description: str, api_key: str, base_url: str, model: str) -> str:
     prompt = f"{CAPTION_PROMPT}\n\n照片描述：{description}\n请生成一句文案。"
+    # caption 是否启用 thinking 由 ENABLE_CAPTION_THINKING 控制（默认 false，因开放式任务易死循环）
+    request_body = {
+        "model": model,
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": prompt},
+                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}}
+                ]
+            }
+        ],
+        "max_tokens": 1000,
+        "temperature": 0.7
+    }
+    if not ENABLE_CAPTION_THINKING:
+        if "xiaomimimo" in base_url:
+            request_body["thinking"] = {"type": "disabled"}
+        # agnes 默认 thinking=off，不加 chat_template_kwargs
+    else:
+        if "agnes" in base_url:
+            request_body["chat_template_kwargs"] = {"enable_thinking": True}
+        # mimo thinking 默认开启，无需额外参数
     try:
         headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
         response = httpx.post(
             f"{base_url}/chat/completions",
             headers=headers,
-            json={
-                "model": model,
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": prompt},
-                            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}}
-                        ]
-                    }
-                ],
-                "max_tokens": 64,
-                "temperature": 0.7
-            },
-            timeout=60.0
+            json=request_body,
+            timeout=120.0
         )
         response.raise_for_status()
-        content = response.json()["choices"][0]["message"]["content"]
-        # 文案是直接返回的文本，不是 JSON
+        message = response.json()["choices"][0]["message"]
+        content = message.get("content") or ""
+        if not content and message.get("reasoning_content"):
+            content = message["reasoning_content"]
         return content.strip() if content else ""
     except Exception as e:
         print(f"  [警告] 文案生成失败: {e}")
@@ -381,32 +419,32 @@ def analyze_photo_task(photo_id: int):
         print(f"  AI 后端: {ai_backend}")
 
         try:
-            # iflow API 并发限制为 1，使用锁
             if ai_backend == "iflow":
-                print(f"  [iflow] 等待锁，确保单并发...")
-                with iflow_lock:
-                    print(f"  [iflow] 获取锁，开始分析...")
-                    # 第一次调用：打分
-                    score_result = call_iflow(image_base64, ANALYSIS_PROMPT, api_key, base_url, model)
-                    
+                # 用 semaphore 控制 mimo/agnes API 并发（agnes 限速 20 RPM，3 并发相对安全）
+                print(f"  [iflow] 等待信号量 (max={MAX_CONCURRENT_API_CALLS} 并发)...")
+                with iflow_call_semaphore:
+                    print(f"  [iflow] 获取信号量，开始分析...")
+                    # 第一次调用：打分（受 ENABLE_THINKING 控制）
+                    score_result = call_iflow(image_base64, ANALYSIS_PROMPT, api_key, base_url, model, enable_thinking=ENABLE_THINKING)
+
                     memory_score = float(score_result.get("memory_score", 50.0))
                     aesthetic_score = float(score_result.get("beauty_score", 50.0))
                     photo_type = score_result.get("type", "")
                     description = score_result.get("description", "")
                     reason = score_result.get("reason", "")
-                    
+
                     print(f"  评分完成: 回忆分={memory_score:.1f}, 美观分={aesthetic_score:.1f}")
-                    
-                    # 第二次调用：生成文案（仅高分照片：回忆分 >= 60）
+
+                    # 第二次调用：生成文案（受 ENABLE_CAPTION 和 CAPTION_MIN_MEMORY 控制）
                     caption = ""
-                    if memory_score >= 60:
+                    if not ENABLE_CAPTION:
+                        print(f"  [skip] caption 已禁用 (ENABLE_CAPTION=false)")
+                    elif memory_score < CAPTION_MIN_MEMORY:
+                        print(f"  [skip] 回忆分 {memory_score:.1f} < {CAPTION_MIN_MEMORY}，跳过文案")
+                    else:
                         print(f"  正在生成文案...")
                         caption = generate_caption(image_base64, description, api_key, base_url, model)
                         print(f"  文案: {caption[:30] if caption else '(无)'}...")
-                    else:
-                        print(f"  回忆分 < 60，跳过文案生成")
-                    
-                    print(f"  [iflow] 释放锁")
             elif ai_backend == "ollama":
                 score_result = call_ollama(image_base64, ANALYSIS_PROMPT, "http://localhost:11434", model)
                 
@@ -419,12 +457,14 @@ def analyze_photo_task(photo_id: int):
                 print(f"  评分完成: 回忆分={memory_score:.1f}, 美观分={aesthetic_score:.1f}")
                 
                 caption = ""
-                if memory_score >= 60:
+                if not ENABLE_CAPTION:
+                    print(f"  [skip] caption 已禁用 (ENABLE_CAPTION=false)")
+                elif memory_score < CAPTION_MIN_MEMORY:
+                    print(f"  [skip] 回忆分 {memory_score:.1f} < {CAPTION_MIN_MEMORY}，跳过文案")
+                else:
                     print(f"  正在生成文案...")
                     caption = generate_caption(image_base64, description, "", "http://localhost:11434", model)
                     print(f"  文案: {caption[:30] if caption else '(无)'}...")
-                else:
-                    print(f"  回忆分 < 60，跳过文案生成")
             else:
                 score_result = call_vllm(image_base64, ANALYSIS_PROMPT, os.getenv("VLLM_HOST"), model)
                 
@@ -437,12 +477,14 @@ def analyze_photo_task(photo_id: int):
                 print(f"  评分完成: 回忆分={memory_score:.1f}, 美观分={aesthetic_score:.1f}")
                 
                 caption = ""
-                if memory_score >= 60:
+                if not ENABLE_CAPTION:
+                    print(f"  [skip] caption 已禁用 (ENABLE_CAPTION=false)")
+                elif memory_score < CAPTION_MIN_MEMORY:
+                    print(f"  [skip] 回忆分 {memory_score:.1f} < {CAPTION_MIN_MEMORY}，跳过文案")
+                else:
                     print(f"  正在生成文案...")
                     caption = generate_caption(image_base64, description, "", os.getenv("VLLM_HOST"), model)
                     print(f"  文案: {caption[:30] if caption else '(无)'}...")
-                else:
-                    print(f"  回忆分 < 60，跳过文案生成")
 
             analysis = AnalysisModel(
                 photo_id=photo.id,
