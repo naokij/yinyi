@@ -30,6 +30,7 @@ async def lifespan(app: FastAPI):
 
     from database import SessionLocal, Photo as PhotoModel
     db = SessionLocal()
+    auto_resume = 0
     try:
         stuck_photos = db.query(PhotoModel).filter(PhotoModel.status == "analyzing").all()
         if stuck_photos:
@@ -37,10 +38,26 @@ async def lifespan(app: FastAPI):
                 photo.status = "pending"
             db.commit()
             print(f"[启动] 重置 {len(stuck_photos)} 张卡住的照片状态为 pending")
+        # 还有待分析照片则自动续跑
+        pending_count = db.query(PhotoModel).filter(PhotoModel.status == "pending").count()
+        if pending_count > 0:
+            auto_resume = pending_count
     except Exception as e:
         print(f"[启动] 重置照片状态失败: {e}")
     finally:
         db.close()
+
+    if auto_resume > 0:
+        import threading
+        def _delayed_resume():
+            import time, httpx
+            time.sleep(3)  # 等服务就绪
+            try:
+                r = httpx.post("http://localhost:8765/api/analyze/all", timeout=5)
+                print(f"[启动] 自动续跑 {auto_resume} 张: {r.status_code}")
+            except Exception as e:
+                print(f"[启动] 自动续跑失败: {e}")
+        threading.Thread(target=_delayed_resume, daemon=True).start()
 
     print(f"[启动] 印忆服务启动成功 (AI_BACKEND={os.getenv('AI_BACKEND', 'not set')})")
     yield
