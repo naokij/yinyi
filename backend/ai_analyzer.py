@@ -147,74 +147,35 @@ CAPTION_PROMPT = """你是一位为「电子相框」撰写旁白短句的中文
 3. 不要出现"这张照片"、"这一刻"、"那天"等指代照片本身的词"""
 
 
-def encode_image_to_base64(image_path: str, max_size_mb: float = 7.0) -> str:
+def encode_image_to_base64(image_path: str) -> str:
     """
-    将图片转为 base64，如果超过限制则压缩
-    iflow API 限制: 10MB base64 (10485760 bytes)
-    base64 编码会增加约 33% 大小，所以原始图片需要控制在 7MB 以内
+    将图片转为 base64，压缩到 1024 边长以控制内存和 API token 消耗。
+    Agnes 图片 token：h_bar/16 * w_bar/16 / 4，1024 边约 1024 tokens。
     """
     from PIL import Image
     import io
-    
-    # base64 编码后增加约 33%，所以原始图片最大约 7MB
-    max_bytes = int(max_size_mb * 1024 * 1024)  # 7MB = 7340032 bytes
-    max_base64_bytes = int(9.5 * 1024 * 1024)  # base64 后最大 9.5MB
-    
-    # 先尝试直接读取
-    with open(image_path, "rb") as f:
-        data = f.read()
-    
-    # 预估 base64 编码后的大小
-    estimated_base64_size = len(data) * 4 // 3
-    
-    print(f"  [DEBUG] 原始图片: {len(data)/1024/1024:.2f}MB, 预估base64: {estimated_base64_size/1024/1024:.2f}MB")
-    
-    # 如果预估 base64 小于 9.5MB，直接返回
-    if estimated_base64_size <= max_base64_bytes:
-        print(f"  [DEBUG] 无需压缩")
-        return base64.b64encode(data).decode("utf-8")
-    
-    # 需要压缩
-    print(f"  [压缩] 图片 {len(data)/1024/1024:.1f}MB 超过限制，开始压缩...")
-    
+
     img = Image.open(image_path)
-    
+
     # 转换为 RGB（去除透明通道）
     if img.mode in ('RGBA', 'P'):
         img = img.convert('RGB')
-    
-    # 逐步降低质量和尺寸直到满足要求
-    quality = 85
-    max_dimension = 2048  # 最大边长
-    
-    while True:
-        # 调整尺寸
-        if max(img.size) > max_dimension:
-            ratio = max_dimension / max(img.size)
-            new_size = (int(img.size[0] * ratio), int(img.size[1] * ratio))
-            img_resized = img.resize(new_size, Image.Resampling.LANCZOS)
-        else:
-            img_resized = img
-        
-        # 保存到内存
-        buffer = io.BytesIO()
-        img_resized.save(buffer, format='JPEG', quality=quality, optimize=True)
-        buffer.seek(0)
-        compressed_data = buffer.read()
-        
-        if len(compressed_data) <= max_bytes:
-            print(f"  [压缩] 完成: {len(compressed_data)/1024/1024:.1f}MB (尺寸: {img_resized.size}, 质量: {quality})")
-            return base64.b64encode(compressed_data).decode("utf-8")
-        
-        # 还太大，继续压缩
-        if quality > 50:
-            quality -= 10
-        elif max_dimension > 1024:
-            max_dimension -= 256
-        else:
-            # 实在压不到 10MB，返回压缩后的版本（可能会报错，但尽力了）
-            print(f"  [压缩] 警告: 无法压缩到 {max_size_mb}MB 以下，当前 {len(compressed_data)/1024/1024:.1f}MB")
-            return base64.b64encode(compressed_data).decode("utf-8")
+
+    # 强制压到 1024 边长（内存节省 ~75%，token 节省 ~67%）
+    MAX_DIM = 1024
+    if max(img.size) > MAX_DIM:
+        ratio = MAX_DIM / max(img.size)
+        new_size = (int(img.size[0] * ratio), int(img.size[1] * ratio))
+        img = img.resize(new_size, Image.Resampling.LANCZOS)
+
+    buffer = io.BytesIO()
+    img.save(buffer, format='JPEG', quality=85, optimize=True)
+    buffer.seek(0)
+    compressed = buffer.read()
+    img.close()
+
+    print(f"  [编码] 压缩后: {len(compressed)/1024/1024:.2f}MB ({img.size[0]}x{img.size[1]})")
+    return base64.b64encode(compressed).decode("utf-8")
 
 
 # caption 校验：thinking model 偶尔会把 prompt+推理过程回显到 content

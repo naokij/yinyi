@@ -14,6 +14,8 @@ EnvironmentFile=/home/jiangle/project/yinyi/.env
 ExecStart=/home/jiangle/project/yinyi/backend/venv/bin/python main.py
 Restart=always
 RestartSec=5
+MemoryMax=2G
+MemoryHigh=1.5G
 StandardOutput=append:/var/log/yinyi/backend.log
 StandardError=append:/var/log/yinyi/backend.log
 
