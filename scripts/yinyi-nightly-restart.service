@@ -1,0 +1,7 @@
+[Unit]
+Description=YinYi Nightly Restart (free memory and swap)
+Requires=yinyi-backend.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/systemctl restart yinyi-backend.service

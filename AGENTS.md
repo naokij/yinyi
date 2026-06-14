@@ -366,6 +366,8 @@ frontend/
     - **agnes (apihub.agnes-ai)**: thinking is OFF by default. Enable via `chat_template_kwargs: {"enable_thinking": true}`. Reasoning field: `provider_specific_fields.reasoning` + `message.reasoning_content`
 12. **Frontend Served by Backend**: After `npm run build`, `dist/` is mounted at `/assets/...` and `/` returns `index.html`. Catch-all SPA fallback at `/{full_path:path}` for Vue Router history mode.
 13. **NFS Mount**: `RequiresMountsFor=/mnt/nas/photos` in systemd unit; `/etc/fstab` line: `192.168.3.6:/volume1/homes/jiangle/Photos /mnt/nas/photos nfs defaults,_netdev,x-systemd.automount,x-systemd.requires=network-online.target,noatime 0 0`
+14. **Nightly Restart Timer**: `yinyi-nightly-restart.timer` restarts service at 4:00 AM daily to flush memory/swap. Combined with lifespan auto-resume, this provides zero-downtime memory management.
+15. **Memory Limit**: `MemoryMax=1G`, `MemoryHigh=768M` — glibc fragmentation causes gradual RSS growth; 1-worker config keeps growth slow; daily timer prevents swap buildup.
 
 ---
 
