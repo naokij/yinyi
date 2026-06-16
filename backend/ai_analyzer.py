@@ -546,7 +546,7 @@ def analyze_photo_task(photo_id: int):
                 memory_score=memory_score,
                 aesthetic_score=aesthetic_score,
                 sentiment=photo_type[0].strip() if isinstance(photo_type, list) and photo_type else (photo_type.split("/")[0].strip() if photo_type else "其他"),
-                photo_type=photo_type,
+                photo_type=photo_type if isinstance(photo_type, str) else "/".join(photo_type) if isinstance(photo_type, list) else str(photo_type),
                 reason=reason,
                 model=f"iflow/{model}" if ai_backend == "iflow" else (model if ai_backend == "ollama" else "vllm")
             )
