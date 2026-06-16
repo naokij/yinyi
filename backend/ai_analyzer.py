@@ -542,10 +542,10 @@ def analyze_photo_task(photo_id: int):
                 photo_id=photo.id,
                 description=description,
                 caption=caption,
-                tags=json.dumps(photo_type.split(","), ensure_ascii=False),
+                tags=json.dumps(photo_type if isinstance(photo_type, list) else [t.strip() for t in photo_type.split("/") if t.strip()], ensure_ascii=False),
                 memory_score=memory_score,
                 aesthetic_score=aesthetic_score,
-                sentiment=photo_type.split(",")[0].strip() if photo_type else "其他",
+                sentiment=photo_type[0].strip() if isinstance(photo_type, list) and photo_type else (photo_type.split("/")[0].strip() if photo_type else "其他"),
                 photo_type=photo_type,
                 reason=reason,
                 model=f"iflow/{model}" if ai_backend == "iflow" else (model if ai_backend == "ollama" else "vllm")
