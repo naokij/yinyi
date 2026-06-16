@@ -433,7 +433,7 @@ def analyze_photo_task(photo_id: int):
 
         print(f"[AI] 开始分析: {photo.filename}")
         photo.status = "analyzing"
-        db.commit()
+        # 不单独 commit，等分析完成统一提交（避免异常时 status 卡在 analyzing）
         
         # 记录开始时间
         start_time = time.time()
@@ -566,10 +566,12 @@ def analyze_photo_task(photo_id: int):
 
         except httpx.TimeoutException:
             print(f"[超时] {photo.filename}")
+            db.rollback()
             photo.status = "pending"
             db.commit()
         except Exception as e:
             print(f"[错误] AI 分析失败: {e}")
+            db.rollback()
             photo.status = "error"
             db.commit()
 
