@@ -30,7 +30,9 @@ export const usePhotoStore = defineStore('photos', {
       analyzing: 0,
       analyzed: 0,
       avg_analyze_time: null,
-      estimated_remaining_seconds: null
+      estimated_remaining_seconds: null,
+      current_photo_id: null,
+      current_photo_filename: null
     }
   }),
 

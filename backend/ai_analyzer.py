@@ -40,13 +40,18 @@ _analyzer_state = {
 }
 
 
-def set_analyzer_status(status: str):
+def set_analyzer_status(status: str, current_photo_id: int = None, current_photo_filename: str = None):
     """设置分析器状态"""
     with _analyzer_state["lock"]:
         _analyzer_state["status"] = status
         from datetime import datetime
         if status == "analyzing":
             _analyzer_state["started_at"] = datetime.now()
+            _analyzer_state["current_photo_id"] = current_photo_id
+            _analyzer_state["current_photo_filename"] = current_photo_filename
+        else:
+            _analyzer_state["current_photo_id"] = None
+            _analyzer_state["current_photo_filename"] = None
 
 
 def get_analyzer_status() -> dict:
@@ -54,7 +59,9 @@ def get_analyzer_status() -> dict:
     with _analyzer_state["lock"]:
         return {
             "status": _analyzer_state["status"],
-            "started_at": _analyzer_state["started_at"]
+            "started_at": _analyzer_state["started_at"],
+            "current_photo_id": _analyzer_state.get("current_photo_id"),
+            "current_photo_filename": _analyzer_state.get("current_photo_filename")
         }
 
 
@@ -401,7 +408,7 @@ def generate_caption(image_base64: str, description: str, api_key: str, base_url
 
 def analyze_photo_task(photo_id: int):
     # 设置分析器状态为进行中
-    set_analyzer_status("analyzing")
+    set_analyzer_status("analyzing", current_photo_id=photo_id)
     
     db = SessionLocal()
     try:
@@ -414,6 +421,7 @@ def analyze_photo_task(photo_id: int):
             print(f"[跳过] 照片已分析，跳过: {photo.filename}")
             set_analyzer_status("idle")
             return
+        set_analyzer_status("analyzing", current_photo_id=photo_id, current_photo_filename=photo.filename)
 
         # 防御性 zombie 检测
         # 情况 A：status=analyzing + 分析完整 → 上次崩溃，直接跳过

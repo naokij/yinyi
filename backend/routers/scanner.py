@@ -60,6 +60,9 @@ class ScanStatus(BaseModel):
     # 预估剩余时间
     avg_analyze_time: Optional[float] = None  # 平均分析时间（秒）
     estimated_remaining_seconds: Optional[float] = None  # 预估剩余时间（秒）
+    # 正在分析的照片（从内存状态读取，因为 status=analyzing 不持久化）
+    current_photo_id: Optional[int] = None
+    current_photo_filename: Optional[str] = None
 
 
 @router.post("/start", response_model=dict)
@@ -83,18 +86,18 @@ async def start_scan(
 async def get_scan_status(db: Session = Depends(get_db)):
     """获取扫描和分析状态"""
     from database import Photo as PhotoModel
-    
+
     total = db.query(PhotoModel).count()
     new = db.query(PhotoModel).filter(PhotoModel.status == "pending").count()
     duplicate = db.query(PhotoModel).filter(PhotoModel.status == "duplicate").count()
-    analyzing = db.query(PhotoModel).filter(PhotoModel.status == "analyzing").count()
+    analyzing_in_db = db.query(PhotoModel).filter(PhotoModel.status == "analyzing").count()
     analyzed = db.query(PhotoModel).filter(PhotoModel.status == "analyzed").count()
-    
+
     # 获取真实的扫描器状态
     scanner_status = get_scanner_status()
     # 获取真实的分析器状态
     analyzer_status = get_analyzer_status()
-    
+
     # 综合状态：扫描进行中 或 分析进行中
     if scanner_status["status"] == "scanning":
         overall_status = "scanning"
@@ -102,13 +105,16 @@ async def get_scan_status(db: Session = Depends(get_db)):
         overall_status = "analyzing"
     else:
         overall_status = "idle"
-    
+
+    # 分析中数量：如果内存中有正在分析的照片，用它（DB 的 status=analyzing 不会持久化）
+    analyzing = max(analyzing_in_db, 1 if analyzer_status["status"] == "analyzing" else 0)
+
     # 计算预估剩余时间
     avg_time = get_average_analyze_time()
     estimated_remaining = None
     if avg_time and new > 0:
         estimated_remaining = avg_time * new
-    
+
     return ScanStatus(
         status=overall_status,
         scanner_status=scanner_status["status"],
@@ -120,7 +126,9 @@ async def get_scan_status(db: Session = Depends(get_db)):
         analyzing=analyzing,
         analyzed=analyzed,
         avg_analyze_time=round(avg_time, 1) if avg_time else None,
-        estimated_remaining_seconds=round(estimated_remaining, 1) if estimated_remaining else None
+        estimated_remaining_seconds=round(estimated_remaining, 1) if estimated_remaining else None,
+        current_photo_id=analyzer_status.get("current_photo_id"),
+        current_photo_filename=analyzer_status.get("current_photo_filename")
     )
 
 
