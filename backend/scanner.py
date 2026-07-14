@@ -5,6 +5,7 @@
 import os
 import hashlib
 import threading
+import time
 from pathlib import Path
 from datetime import datetime
 from typing import Optional, Set
@@ -128,101 +129,113 @@ def scan_directory_task(
             return
         
         print(f"[扫描] 开始扫描: {scan_path}")
-        
+
         # 获取已有照片的文件哈希集合
         existing_hashes = {p.file_hash for p in db.query(PhotoModel.file_hash).filter(PhotoModel.file_hash != None).all()}
         existing_paths = {p.path for p in db.query(PhotoModel.path).all()}
-        
+
         new_count = 0
         duplicate_count = 0
         updated_count = 0
-        
-        # 遍历文件
-        pattern = "**/*" if recursive else "*"
-        for file_path in scan_path.glob(pattern):
-            if not file_path.is_file():
-                continue
+        processed = 0
+        last_progress = time.time()
+        progress_interval = 30
 
-            #跳过 NAS 系统目录、缩略图、回收站等
-            if any(part in SKIP_DIRS for part in file_path.parts):
-                continue
+        def _handle_file(full_path: str, filename: str):
+            """处理单个文件：检查存在、修改、或新增"""
+            nonlocal new_count, duplicate_count, updated_count, processed, last_progress
+            processed += 1
+            now = time.time()
+            if now - last_progress >= progress_interval:
+                print(f"[扫描] 已 {processed} 个文件 | 新增 {new_count} 重复 {duplicate_count} 更新 {updated_count}")
+                last_progress = now
 
-            if not is_image_file(file_path.name):
-                continue
-            
-            str_path = str(file_path)
-            
-            # 检查路径是否已存在
-            existing_photo = db.query(PhotoModel).filter(PhotoModel.path == str_path).first()
-            
-            if existing_photo:
+            if full_path in existing_paths:
                 if not check_modified:
-                    continue
-                
-                # 检查文件是否修改
-                current_mtime = datetime.fromtimestamp(file_path.stat().st_mtime)
+                    return
+                existing_photo = db.query(PhotoModel).filter(PhotoModel.path == full_path).first()
+                if not existing_photo:
+                    return
+                current_mtime = datetime.fromtimestamp(os.path.getmtime(full_path))
                 if existing_photo.modified_time == current_mtime:
-                    continue
-                
-                # 文件已更新，重新处理
-                print(f"[更新] 文件已更新: {file_path.name}")
+                    return
+
+                print(f"[更新] 文件已更新: {filename}")
                 existing_photo.status = "pending"
                 existing_photo.modified_time = current_mtime
-                existing_photo.file_size = file_path.stat().st_size
+                existing_photo.file_size = os.path.getsize(full_path)
                 updated_count += 1
                 db.commit()
-                continue
-            
-            # 新文件，计算哈希
-            print(f"[新照片] 发现新照片: {file_path.name}")
-            file_hash = compute_file_hash(str_path)
-            
-            # 检查是否重复
+                return
+
+            print(f"[新照片] 发现新照片: {filename}")
+            file_hash = compute_file_hash(full_path)
             if file_hash in existing_hashes:
-                print(f"[重复] 发现重复: {file_path.name}")
-                # 找到原图
+                print(f"[重复] 发现重复: {filename}")
                 original = db.query(PhotoModel).filter(PhotoModel.file_hash == file_hash).first()
-                
                 photo = PhotoModel(
-                    path=str_path,
-                    filename=file_path.name,
-                    file_hash=file_hash,
-                    file_size=file_path.stat().st_size,
-                    modified_time=datetime.fromtimestamp(file_path.stat().st_mtime),
-                    status="duplicate",
-                    duplicate_of=original.id if original else None
+                    path=full_path, filename=filename, file_hash=file_hash,
+                    file_size=os.path.getsize(full_path),
+                    modified_time=datetime.fromtimestamp(os.path.getmtime(full_path)),
+                    status="duplicate", duplicate_of=original.id if original else None
                 )
                 duplicate_count += 1
             else:
-                # 提取 EXIF 和图片信息
-                exif = extract_exif(str_path)
-                width, height = get_image_dimensions(str_path)
-                
+                exif = extract_exif(full_path)
+                width, height = get_image_dimensions(full_path)
                 photo = PhotoModel(
-                    path=str_path,
-                    filename=file_path.name,
-                    file_hash=file_hash,
-                    file_size=file_path.stat().st_size,
-                    width=width,
-                    height=height,
-                    modified_time=datetime.fromtimestamp(file_path.stat().st_mtime),
-                    taken_at=exif.get('taken_at'),
-                    location=exif.get('location'),
-                    camera=exif.get('camera'),
-                    lens=exif.get('lens'),
+                    path=full_path, filename=filename, file_hash=file_hash,
+                    file_size=os.path.getsize(full_path), width=width, height=height,
+                    modified_time=datetime.fromtimestamp(os.path.getmtime(full_path)),
+                    taken_at=exif.get('taken_at'), location=exif.get('location'),
+                    camera=exif.get('camera'), lens=exif.get('lens'),
                     status="pending"
                 )
                 existing_hashes.add(file_hash)
                 new_count += 1
-            
             db.add(photo)
-            
-            # 每 10 张提交一次
             if (new_count + duplicate_count + updated_count) % 10 == 0:
                 db.commit()
+
+        def _walk_and_scan(start_path: str):
+            """遍历目录树扫描图片文件"""
+            for root, dirs, files in os.walk(start_path, topdown=True):
+                root_name = os.path.basename(root)
+                if root_name in SKIP_DIRS:
+                    dirs.clear()
+                    continue
+                dirs[:] = [d for d in dirs if d not in SKIP_DIRS]
+                for f in files:
+                    if not is_image_file(f):
+                        continue
+                    _handle_file(os.path.join(root, f), f)
+
+        # 优先扫描 MobileBackup 和 PhotoLibrary（新增照片的主要来源）
+        scan_root = str(scan_path)
+        for pri in ["MobileBackup", "PhotoLibrary"]:
+            pri_path = os.path.join(scan_root, pri)
+            if os.path.isdir(pri_path):
+                print(f"[扫描] 优先扫描: {pri}")
+                _walk_and_scan(pri_path)
+
+        # 再扫描剩余目录
+        already_scanned = [os.path.join(scan_root, d) for d in ["MobileBackup", "PhotoLibrary"]]
+        print(f"[扫描] 扫描其他目录...")
+        for root, dirs, files in os.walk(scan_root, topdown=True):
+            if any(root.startswith(s) for s in already_scanned):
+                dirs.clear()
+                continue
+            root_name = os.path.basename(root)
+            if root_name in SKIP_DIRS:
+                dirs.clear()
+                continue
+            dirs[:] = [d for d in dirs if d not in SKIP_DIRS]
+            for f in files:
+                if not is_image_file(f):
+                    continue
+                _handle_file(os.path.join(root, f), f)
         
         db.commit()
-        
         # 设置扫描状态为完成
         set_scanner_status("completed")
         
