@@ -370,10 +370,6 @@ def generate_caption(image_base64: str, description: str, api_key: str, base_url
         "model": model,
         "messages": [
             {
-                "role": "system",
-                "content": "你只生成一句中文文案，不要任何推理过程、分析或描述。直接输出结果。"
-            },
-            {
                 "role": "user",
                 "content": [
                     {"type": "text", "text": prompt},
