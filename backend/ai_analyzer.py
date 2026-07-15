@@ -310,10 +310,12 @@ def call_iflow(image_base64: str, prompt: str, api_key: str, base_url: str, mode
         "max_tokens": 4000,
         "temperature": 0.7
     }
-    # mimo thinking 是默认开启的（用 thinking.type=disabled 关掉）；agnes 用 chat_template_kwargs 显式开启
+    # Agnes 现在默认开启 thinking，需显式控制
     if not enable_thinking:
         if "xiaomimimo" in base_url:
             request_body["thinking"] = {"type": "disabled"}
+        if "agnes" in base_url:
+            request_body["chat_template_kwargs"] = {"enable_thinking": False}
     else:
         if "agnes" in base_url:
             request_body["chat_template_kwargs"] = {"enable_thinking": True}
@@ -364,10 +366,13 @@ def call_iflow(image_base64: str, prompt: str, api_key: str, base_url: str, mode
 
 def generate_caption(image_base64: str, description: str, api_key: str, base_url: str, model: str) -> str:
     prompt = f"{CAPTION_PROMPT}\n\n照片描述：{description}\n请生成一句文案。"
-    # caption 是否启用 thinking 由 ENABLE_CAPTION_THINKING 控制（默认 false，因开放式任务易死循环）
     request_body = {
         "model": model,
         "messages": [
+            {
+                "role": "system",
+                "content": "你只生成一句中文文案，不要任何推理过程、分析或描述。直接输出结果。"
+            },
             {
                 "role": "user",
                 "content": [
@@ -376,17 +381,17 @@ def generate_caption(image_base64: str, description: str, api_key: str, base_url
                 ]
             }
         ],
-        "max_tokens": 1000,
-        "temperature": 0.7
+        "max_tokens": 150,
+        "temperature": 0.3
     }
     if not ENABLE_CAPTION_THINKING:
         if "xiaomimimo" in base_url:
             request_body["thinking"] = {"type": "disabled"}
-        # agnes 默认 thinking=off，不加 chat_template_kwargs
+        if "agnes" in base_url:
+            request_body["chat_template_kwargs"] = {"enable_thinking": False}
     else:
         if "agnes" in base_url:
             request_body["chat_template_kwargs"] = {"enable_thinking": True}
-        # mimo thinking 默认开启，无需额外参数
     try:
         headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
         response = httpx.post(
